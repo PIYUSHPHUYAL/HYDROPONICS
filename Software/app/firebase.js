@@ -7,13 +7,13 @@ import "firebase/database";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyBkr6fF1ZmZ6DtSlKcPA3UrAYSH4Ib9pIc",
-  authDomain: "hydroponics-a6609.firebaseapp.com",
-  projectId: "hydroponics-a6609",
-  storageBucket: "hydroponics-a6609.firebasestorage.app",
-  messagingSenderId: "412721417359",
-  appId: "1:412721417359:web:ccd3cd6de717645048f4fa",
-  measurementId: "G-PK7SK97G2S"
+  apiKey: "#####################",
+  authDomain: "##############",
+  projectId: "#################",
+  storageBucket: "############",
+  messagingSenderId: "#############",
+  appId: "##################",
+  measurementId: "############"
 };
 
 
