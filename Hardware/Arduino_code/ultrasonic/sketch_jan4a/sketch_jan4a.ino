@@ -4,8 +4,8 @@
 #include <addons/RTDBHelper.h>
 
 // WiFi credentials
-const char* ssid = "Piyush";
-const char* password = "howdareyou#@123";
+const char* ssid = "############";
+const char* password = "#############";
 
 // Firebase credentials - Replace with your values
 #define API_KEY "Use_your_own"
