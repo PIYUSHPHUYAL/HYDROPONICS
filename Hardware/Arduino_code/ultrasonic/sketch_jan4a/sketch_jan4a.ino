@@ -5,15 +5,17 @@
 #include <Arduino.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <DHT.h>  // Add DHT library
+#include <DHT.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 // WiFi credentials
-const char* ssid = "###################";
-const char* password = "#################";
+const char* ssid = "Tanka";
+const char* password = "Tanka#@123";
 
 // Firebase credentials
-#define API_KEY "#######################"
-#define DATABASE_URL "###########3"
+#define API_KEY "AIzaSyBkr6fF1ZmZ6DtSlKcPA3UrAYSH4Ib9pIc"
+#define DATABASE_URL "https://hydroponics-a6609-default-rtdb.firebaseio.com/"
 
 // Define Firebase Data object
 FirebaseData fbdo;
@@ -21,9 +23,14 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 // DHT11 configuration
-#define DHTPIN 4      // DHT11 data pin (you can change this to any available digital pin)
+#define DHTPIN 4      // DHT11 data pin 
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
+
+// DS18B20 configuration
+const int oneWireBus = 13; 
+OneWire oneWire(oneWireBus);
+DallasTemperature waterTempSensor(&oneWire);
 
 // LDR sensor pin
 const int ldrPin = 34;  // ADC1 channel on ESP32
@@ -41,8 +48,9 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", 19800);
 void setup() {
   Serial.begin(115200);
   
-  // Initialize DHT11
+  // Initialize sensors
   dht.begin();
+  waterTempSensor.begin();
   
   pinMode(ldrPin, INPUT);
   pinMode(trigPin, OUTPUT);
@@ -82,14 +90,18 @@ void loop() {
     sendDataPrevMillis = millis();
     
     // Read DHT11 sensor
-    float humidity = dht.readHumidity();
-    float temperature = dht.readTemperature();
+    float airHumidity = dht.readHumidity();
+    float airTemperature = dht.readTemperature();
     
     // Check if DHT11 reading failed
-    if (isnan(humidity) || isnan(temperature)) {
+    if (isnan(airHumidity) || isnan(airTemperature)) {
       Serial.println("Failed to read from DHT sensor!");
       return;
     }
+
+    // Read DS18B20 water temperature
+    waterTempSensor.requestTemperatures();
+    float waterTemperature = waterTempSensor.getTempCByIndex(0);
 
     // Read LDR value
     int ldrValue = analogRead(ldrPin);
@@ -102,12 +114,15 @@ void loop() {
     unsigned long timestamp = timeClient.getEpochTime();
 
     // Print to Serial Monitor
-    Serial.print("Temperature: ");
-    Serial.print(temperature);
+    Serial.print("Air Temperature: ");
+    Serial.print(airTemperature);
     Serial.println(" °C");
-    Serial.print("Humidity: ");
-    Serial.print(humidity);
+    Serial.print("Air Humidity: ");
+    Serial.print(airHumidity);
     Serial.println(" %");
+    Serial.print("Water Temperature: ");
+    Serial.print(waterTemperature);
+    Serial.println(" °C");
     Serial.print("LDR Value: ");
     Serial.println(ldrValue);
     Serial.print("Distance: ");
@@ -117,8 +132,9 @@ void loop() {
 
     // Create a JSON object to send to Firebase
     FirebaseJson jsonData;
-    jsonData.set("temperature", temperature);
-    jsonData.set("humidity", humidity);
+    jsonData.set("airTemperature", airTemperature);
+    jsonData.set("airHumidity", airHumidity);
+    jsonData.set("waterTemperature", waterTemperature);
     jsonData.set("ldr", ldrValue);
     jsonData.set("distance", distance);
 

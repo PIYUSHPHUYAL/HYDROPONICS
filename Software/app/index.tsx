@@ -5,7 +5,10 @@ import { database, ref, onValue } from "./firebase";
 export default function App() {
     const [data, setData] = useState({
         ldr: null,
-        distance: null
+        distance: null,
+        airHumidity: null,
+        airTemperature: null,
+        waterTemperature: null
     });
 
     useEffect(() => {
@@ -20,9 +23,9 @@ export default function App() {
                 setData({
                     ldr: latestReading.ldr,
                     distance: latestReading.distance,
-                    humidity: latestReading.humidity,
-                    temperature: latestReading.temperature
-
+                    humidity: latestReading.airHumidity,
+                    temperature: latestReading.airTemperature,
+                    waterTemperature: latestReading.waterTemperature
                 });
             }
         });
@@ -34,8 +37,9 @@ export default function App() {
         <View>
             <Text>LDR: {data.ldr ?? 'Loading...'}</Text>
             <Text>Distance: {data.distance ?? 'Loading...'} cm</Text>
-            <Text>Humidity: {data.humidity ?? 'Loading...'} %</Text>
-            <Text>Temperature: {data.temperature ?? 'Loading...'} °C</Text>
+            <Text>Air Humidity: {data.humidity ?? 'Loading...'} %</Text>
+            <Text>Air Temperature: {data.temperature ?? 'Loading...'} °C</Text>
+            <Text>Water Temperature: {data.waterTemperature ?? 'Loading...'} °C</Text>
         </View>
     );
 }
