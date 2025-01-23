@@ -1,40 +1,41 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { database, ref, onValue } from "./firebase";
-// import { ref, onValue } from 'firebase/database';
 
 export default function App() {
-    const [ldr, setLdr] = useState(500);
+    const [data, setData] = useState({
+        ldr: null,
+        distance: null
+    });
 
     useEffect(() => {
-        const data = ref(database);
+        const readingsRef = ref(database, 'readings');
+        
+        const unsubscribe = onValue(readingsRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const allData = snapshot.val();
+                const timestamps = Object.keys(allData);
+                const latestReading = allData[timestamps[timestamps.length - 1]];
+                
+                setData({
+                    ldr: latestReading.ldr,
+                    distance: latestReading.distance,
+                    humidity: latestReading.humidity,
+                    temperature: latestReading.temperature
 
-        onValue(data, (snapshot) => {
-            setLdr(snapshot.val().ldr);
+                });
+            }
         });
-    }, [database]);
+
+        return () => unsubscribe();
+    }, []);
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.title}>Ultra-Sonic Readings:</Text>
-            <Text style={styles.value}>{ldr !== null ? ldr : 'Loading...'}</Text>
+        <View>
+            <Text>LDR: {data.ldr ?? 'Loading...'}</Text>
+            <Text>Distance: {data.distance ?? 'Loading...'} cm</Text>
+            <Text>Humidity: {data.humidity ?? 'Loading...'} %</Text>
+            <Text>Temperature: {data.temperature ?? 'Loading...'} °C</Text>
         </View>
     );
 }
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-    },
-    value: {
-        fontSize: 20,
-        marginTop: 10,
-    },
-});
