@@ -8,7 +8,9 @@ export default function App() {
         distance: null,
         airHumidity: null,
         airTemperature: null,
-        waterTemperature: null
+        waterTemperature: null,
+        pH: null,
+        tds: null
     });
 
     useEffect(() => {
@@ -23,9 +25,11 @@ export default function App() {
                 setData({
                     ldr: latestReading.ldr,
                     distance: latestReading.distance,
-                    humidity: latestReading.airHumidity,
-                    temperature: latestReading.airTemperature,
-                    waterTemperature: latestReading.waterTemperature
+                    airHumidity: latestReading.airHumidity,
+                    airTemperature: latestReading.airTemperature,
+                    waterTemperature: latestReading.waterTemperature,
+                    pH: latestReading.pH,
+                    tds: latestReading.tds
                 });
             }
         });
@@ -37,9 +41,11 @@ export default function App() {
         <View>
             <Text>LDR: {data.ldr ?? 'Loading...'}</Text>
             <Text>Distance: {data.distance ?? 'Loading...'} cm</Text>
-            <Text>Air Humidity: {data.humidity ?? 'Loading...'} %</Text>
-            <Text>Air Temperature: {data.temperature ?? 'Loading...'} °C</Text>
+            <Text>Air Humidity: {data.airHumidity ?? 'Loading...'} %</Text>
+            <Text>Air Temperature: {data.airTemperature ?? 'Loading...'} °C</Text>
             <Text>Water Temperature: {data.waterTemperature ?? 'Loading...'} °C</Text>
+            <Text>pH: {data.pH ?? 'Loading...'}</Text>
+            <Text>TDS: {data.tds ?? 'Loading...'} ppm</Text>
         </View>
     );
 }

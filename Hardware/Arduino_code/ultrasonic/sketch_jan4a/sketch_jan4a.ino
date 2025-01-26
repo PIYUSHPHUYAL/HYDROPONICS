@@ -39,6 +39,14 @@ const int ldrPin = 34;  // ADC1 channel on ESP32
 const int trigPin = 5;
 const int echoPin = 18;
 
+// pH sensor pin
+const int phSensorPin = 35;  // Analog pin for pH sensor
+
+// TDS sensor configuration
+const int tdsSensorPin = 32;  // Analog pin for TDS sensor
+#define VREF 3.3           // ESP32 ADC reference voltage
+#define ADC_RESOLUTION 4095 // 12-bit ADC resolution for ESP32
+
 unsigned long sendDataPrevMillis = 0;
 bool signupOK = false;
 
@@ -55,6 +63,8 @@ void setup() {
   pinMode(ldrPin, INPUT);
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
+  pinMode(phSensorPin, INPUT);
+  pinMode(tdsSensorPin, INPUT);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -109,6 +119,16 @@ void loop() {
     // Measure distance
     long distance = measureDistance();
 
+    // Read pH value
+    int phSensorValue = analogRead(phSensorPin);
+    float phVoltage = phSensorValue * (3.3 / 4095.0);
+    float pH = 3.5 * phVoltage;  // Note: Calibrate this formula for accuracy
+
+    // Read TDS value
+    int tdsSensorValue = analogRead(tdsSensorPin);
+    float tdsVoltage = tdsSensorValue * (VREF / ADC_RESOLUTION);
+    float tds = (tdsVoltage / VREF) * 1000;  // TDS value in ppm (simplified)
+
     // Get current timestamp
     timeClient.update();
     unsigned long timestamp = timeClient.getEpochTime();
@@ -127,6 +147,11 @@ void loop() {
     Serial.println(ldrValue);
     Serial.print("Distance: ");
     Serial.println(distance);
+    Serial.print("pH Value: ");
+    Serial.println(pH);
+    Serial.print("TDS Value: ");
+    Serial.print(tds, 2);
+    Serial.println(" ppm");
     Serial.print("Timestamp: ");
     Serial.println(timestamp);
 
@@ -137,6 +162,8 @@ void loop() {
     jsonData.set("waterTemperature", waterTemperature);
     jsonData.set("ldr", ldrValue);
     jsonData.set("distance", distance);
+    jsonData.set("pH", pH);
+    jsonData.set("tds", tds);
 
     // Use a unique path for each reading
     String path = "/readings/" + String(timestamp);
