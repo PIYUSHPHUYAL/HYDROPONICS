@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, get, child } from 'firebase/database';
 import "firebase/database";
+import { getAuth, signInAnonymously } from 'firebase/auth';
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -20,5 +21,10 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const database = getDatabase();
+const auth = getAuth(app);
 
-export { database, ref, onValue, get, child };
+signInAnonymously(auth).catch(error => {
+  console.error("Authentication error:", error);
+});
+
+export { database, ref, onValue, get, child, auth  };

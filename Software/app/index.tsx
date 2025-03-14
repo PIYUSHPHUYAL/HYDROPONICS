@@ -15,13 +15,13 @@ export default function App() {
 
     useEffect(() => {
         const readingsRef = ref(database, 'readings');
-        
+
         const unsubscribe = onValue(readingsRef, (snapshot) => {
             if (snapshot.exists()) {
                 const allData = snapshot.val();
                 const timestamps = Object.keys(allData);
                 const latestReading = allData[timestamps[timestamps.length - 1]];
-                
+
                 setData({
                     ldr: latestReading.ldr,
                     distance: latestReading.distance,
