@@ -9,21 +9,19 @@ const _Layout = () => {
       screenOptions={{
         tabBarStyle: {
           position: 'absolute',
-          bottom: 10,
-          left: 10,
-          right: 10,
+          bottom: 25,
+          // left: 60,  // Keep left as it is
+          // right: 10,
           elevation: 0,
           backgroundColor: '#ffffff',
-          borderRadius: 20, // Increased border radius for more rounded corners
-          height: 80, // Reduced height slightly
+          borderRadius: 60,
+          height: 80,
+          width: 350,
           shadowColor: '#000',
-          shadowOffset: {
-            width: 0,
-            height: 2,
-          },
+          shadowOffset: { width: 0, height: 1 },
           shadowOpacity: 0.1,
           shadowRadius: 3.5,
-          // Remove paddingBottom to center icons vertically
+          transform: [{ translateX: 18 }],
         },
         tabBarShowLabel: false,
         tabBarItemStyle: {

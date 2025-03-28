@@ -71,21 +71,20 @@ export default function Index() {
       <StatusBar style="dark" />
       <ScrollView className="flex-1">
         {/* Header */}
-        <View className="flex-row justify-between items-center px-5 pt-12 pb-2">
-          <View className="flex-row items-center">
-            <Image
-              source={{ uri: 'https://cdn-icons-png.flaticon.com/512/628/628324.png' }}
-              className="w-8 h-8 mr-2"
-              style={{ tintColor: '#4CAF50' }}
-            />
-            <Text className="text-lg font-semibold text-green-500">Hey Piyush!</Text>
-          </View>
-          <TouchableOpacity onPress={goToNotifications}>
-            <Ionicons name="notifications-outline" size={24} color="black" />
-            {/* Red dot indicator for new notifications */}
-            <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></View>
-          </TouchableOpacity>
+        <View className="flex-row justify-between items-center px-5 pt-4 pb-2">
+        <View style={{ transform: [{ translateX: 110 }] }} className="flex-row items-center">
+          <Image
+            source={require('../../assets12345/logo.png')}
+            className="w-8 h-8 mr-2"
+          />
+          <Text className="text-lg font-semibold text-green-500">Hey Piyush!</Text>
         </View>
+        <TouchableOpacity onPress={goToNotifications}>
+          <Ionicons name="notifications-outline" size={24} color="black" />
+          <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></View>
+        </TouchableOpacity>
+      </View>
+
 
         {/* Subtitle */}
         <Text className="text-center text-blue-900 font-medium px-5 mb-4">
@@ -175,29 +174,7 @@ export default function Index() {
           </View>
         </View>
 
-        {/* Additional readings from Firebase */}
-        <View className="mx-5 mb-5">
-          <Text className="text-lg font-semibold mb-2">Additional Readings</Text>
-          <View className="flex-row">
-            {/* Air Humidity */}
-            <View className="flex-1 mr-2 p-4 border border-gray-200 rounded-xl items-center">
-              <View className="w-10 h-10 mb-3 items-center justify-center">
-                <Ionicons name="cloud-outline" size={28} color="#0088FF" />
-              </View>
-              <Text className="text-2xl font-bold">{sensorData.airHumidity}%</Text>
-              <Text className="text-gray-500 text-sm">air humidity</Text>
-            </View>
 
-            {/* Air Temperature */}
-            <View className="flex-1 ml-2 p-4 border border-gray-200 rounded-xl items-center">
-              <View className="w-10 h-10 mb-3 items-center justify-center">
-                <Ionicons name="thermometer-outline" size={28} color="#FF9800" />
-              </View>
-              <Text className="text-2xl font-bold">{sensorData.airTemperature}°</Text>
-              <Text className="text-gray-500 text-sm">air temperature</Text>
-            </View>
-          </View>
-        </View>
 
         {/* Add some bottom padding to account for the tab bar */}
         <View className="h-24" />

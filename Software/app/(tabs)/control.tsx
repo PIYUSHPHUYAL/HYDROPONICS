@@ -58,16 +58,16 @@ const Control = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      {/* Just the bell icon in the top right */}
-      <View className="flex-row justify-end px-5 pt-12">
+      <View style={{ position: 'absolute', top: 63, right: 17.5,  zIndex: 10 }}>
         <TouchableOpacity onPress={goToNotifications}>
           <Ionicons name="notifications-outline" size={24} color="black" />
           <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></View>
         </TouchableOpacity>
       </View>
 
+
       {/* Water Pump Control Card */}
-      <View className="mx-5 mt-10 rounded-xl overflow-hidden bg-blue-700">
+      <View className="mx-5 mt-20 rounded-xl overflow-hidden bg-blue-700">
         <View className="p-5">
           <View className="flex-row justify-between items-center">
             <View>
