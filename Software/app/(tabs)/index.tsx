@@ -69,7 +69,7 @@ export default function Index() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <StatusBar style="dark" />
-      <ScrollView className="flex-1">
+
         {/* Header */}
         <View className="flex-row justify-between items-center px-5 pt-4 pb-2">
         <View style={{ transform: [{ translateX: 110 }] }} className="flex-row items-center">
@@ -111,6 +111,7 @@ export default function Index() {
           </View>
         </View>
 
+        <ScrollView className="flex-1">
         {/* Metrics Grid */}
         <View className="mx-5 mb-5">
           <View className="flex-row mb-4">
