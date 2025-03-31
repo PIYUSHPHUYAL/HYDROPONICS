@@ -1,17 +1,45 @@
-import { View, Text } from 'react-native';
-import React from 'react';
+import { View, Image, Animated } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 const _Layout = () => {
+  const [showSplash, setShowSplash] = useState(true);
+  const splashOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    // // Set up the animation
+    // Animated.timing(splashOpacity, {
+    //   toValue: 0,
+    //   duration: 500,
+    //   useNativeDriver: true,
+    // }).start();
+
+    // Hide splash screen after 2 seconds
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (showSplash) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "white" }}>
+        <Animated.Image
+          source={require("../../assets12345/Welcome_screen.png")}
+          style={{ width: 250, height: 250, opacity: splashOpacity }}
+        />
+      </View>
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
         tabBarStyle: {
           position: 'absolute',
           bottom: 25,
-          // left: 60,  // Keep left as it is
-          // right: 10,
           elevation: 0,
           backgroundColor: '#ffffff',
           borderRadius: 60,
@@ -25,7 +53,6 @@ const _Layout = () => {
         },
         tabBarShowLabel: false,
         tabBarItemStyle: {
-          // Center icons vertically
           marginTop: 22.5,
           height: 60,
         },
@@ -36,9 +63,9 @@ const _Layout = () => {
         options={{
           title: 'Home',
           headerShown: false,
-          tabBarIcon: ({ focused, size }) => (
+          tabBarIcon: ({ focused }) => (
             <Ionicons
-              name="home"
+              name="home-outline"
               color={focused ? '#4CAF50' : '#888'}
               size={26}
             />
@@ -50,9 +77,9 @@ const _Layout = () => {
         options={{
           title: 'Control',
           headerShown: false,
-          tabBarIcon: ({ focused, size }) => (
+          tabBarIcon: ({ focused }) => (
             <Ionicons
-              name="options"
+              name="options-outline"
               color={focused ? '#4CAF50' : '#888'}
               size={26}
             />
@@ -64,9 +91,9 @@ const _Layout = () => {
         options={{
           title: 'Visualization',
           headerShown: false,
-          tabBarIcon: ({ focused, size }) => (
+          tabBarIcon: ({ focused }) => (
             <Ionicons
-              name="bar-chart"
+              name="bar-chart-outline"
               color={focused ? '#4CAF50' : '#888'}
               size={26}
             />
@@ -78,24 +105,21 @@ const _Layout = () => {
         options={{
           title: 'Settings',
           headerShown: false,
-          tabBarIcon: ({ focused, size }) => (
+          tabBarIcon: ({ focused }) => (
             <Ionicons
-              name="settings"
+              name="settings-outline"
               color={focused ? '#4CAF50' : '#888'}
               size={26}
             />
           ),
         }}
       />
-      {/* Removed any extra tab screens */}
-
-      {/* Add notifications as a hidden screen that won't appear in the tab bar */}
       <Tabs.Screen
         name="notifications"
         options={{
           title: 'Notifications',
           headerShown: false,
-          href: null, // This prevents it from showing in the tab bar
+          href: null,
         }}
       />
     </Tabs>
