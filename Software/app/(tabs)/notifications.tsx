@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,10 +11,11 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from "expo-router";
+import { database, ref, onValue } from "./firebase";
 
 interface Notification {
   id: string;
-  type: "critical" | "warning" | "normal";
+  type: "critical" | "warning";
   message: string;
   parameter: string;
   value: string;
@@ -22,58 +23,188 @@ interface Notification {
   read: boolean;
 }
 
+// Define threshold values for different parameters
+const THRESHOLDS = {
+  pH: {
+    critical: { min: 6.0, max: 7.5 },
+    warning: { min: 6.2, max: 7.2 }
+  },
+  tds: {
+    warning: { min: 500 },
+    critical: { max: 1500 }
+  },
+  waterTemperature: {
+    warning: { min: 18 },
+    critical: { max: 30 }
+  },
+  airHumidity: {
+    warning: { min: 40, max: 80 }
+  },
+  airTemperature: {
+    warning: { min: 15 },
+    critical: { max: 35 }
+  }
+};
+
 export default function Notifications() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("critical");
   const screenWidth = Dimensions.get('window').width;
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: "1",
-      type: "critical",
-      message: "pH Level Critical",
-      parameter: "pH",
-      value: "7.0",
-      timestamp: "10:30 AM",
-      read: false,
-    },
-    {
-      id: "2",
-      type: "warning",
-      message: "Water Level Low",
-      parameter: "Water Level",
-      value: "8cm",
-      timestamp: "9:45 AM",
-      read: false,
-    },
-    {
-      id: "3",
-      type: "normal",
-      message: "Temperature Normal",
-      parameter: "Temp",
-      value: "22°C",
-      timestamp: "8:30 AM",
-      read: true,
-    },
-    {
-      id: "4",
-      type: "warning",
-      message: "Ammonia Level Rising",
-      parameter: "Ammonia",
-      value: "0.25ppm",
-      timestamp: "7:15 AM",
-      read: false,
-    },
-    {
-      id: "5",
-      type: "critical",
-      message: "Oxygen Level Low",
-      parameter: "O₂",
-      value: "4mg/L",
-      timestamp: "Yesterday",
-      read: true,
-    },
-  ]);
+  // Function to generate a notification based on sensor data
+  const generateNotification = (
+    parameter: string,
+    value: any,
+    thresholds: any,
+    timestamp: number
+  ): Notification | null => {
+    // Skip if value is undefined or null
+    if (value === undefined || value === null) return null;
+
+    const numValue = parseFloat(value);
+    let type: "critical" | "warning" | "normal" = "normal";
+    let message = "";
+
+    // Check critical thresholds first
+    if (thresholds.critical) {
+      if (thresholds.critical.min !== undefined && numValue < thresholds.critical.min) {
+        type = "critical";
+        message = `${parameter} Too Low`;
+      } else if (thresholds.critical.max !== undefined && numValue > thresholds.critical.max) {
+        type = "critical";
+        message = `${parameter} Too High`;
+      }
+    }
+
+    // If not critical, check warning thresholds
+    if (type === "normal" && thresholds.warning) {
+      if (thresholds.warning.min !== undefined && numValue < thresholds.warning.min) {
+        type = "warning";
+        message = `${parameter} Low`;
+      } else if (thresholds.warning.max !== undefined && numValue > thresholds.warning.max) {
+        type = "warning";
+        message = `${parameter} High`;
+      }
+    }
+
+    // If within normal range, don't create a notification
+    if (type === "normal") {
+      return null;
+    }
+
+    // Format the timestamp
+    const date = new Date(timestamp);
+    const formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const today = new Date();
+
+    let formattedDate;
+    if (date.toDateString() === today.toDateString()) {
+      formattedDate = formattedTime;
+    } else {
+      formattedDate = "Yesterday";
+    }
+
+    // Create and return the notification
+    return {
+      id: `${parameter}-${Date.now()}`,
+      type,
+      message,
+      parameter,
+      value: numValue.toFixed(parameter === "pH" ? 2 : 0),
+      timestamp: formattedDate,
+      read: false
+    };
+  };
+
+  useEffect(() => {
+    // Reference to the readings node
+    const readingsRef = ref(database, "readings");
+
+    // Set up the listener
+    const unsubscribe = onValue(
+      readingsRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          // Get the latest reading
+          let latestReading = null;
+          let latestTimestamp = 0;
+
+          snapshot.forEach((childSnapshot) => {
+            const key = Number.parseInt(childSnapshot.key);
+            if (key > latestTimestamp) {
+              latestTimestamp = key;
+              latestReading = childSnapshot.val();
+            }
+          });
+
+          if (latestReading) {
+            // Generate notifications based on the latest reading
+            const newNotifications: Notification[] = [];
+
+            // Check each parameter against its thresholds
+            const pHNotification = generateNotification(
+              "pH",
+              latestReading.pH,
+              THRESHOLDS.pH,
+              latestTimestamp
+            );
+            if (pHNotification) newNotifications.push(pHNotification);
+
+            const tdsNotification = generateNotification(
+              "TDS",
+              latestReading.tds,
+              THRESHOLDS.tds,
+              latestTimestamp
+            );
+            if (tdsNotification) newNotifications.push(tdsNotification);
+
+            const waterTempNotification = generateNotification(
+              "Water Temp",
+              latestReading.waterTemperature,
+              THRESHOLDS.waterTemperature,
+              latestTimestamp
+            );
+            if (waterTempNotification) newNotifications.push(waterTempNotification);
+
+            const airHumidityNotification = generateNotification(
+              "Air Humidity",
+              latestReading.airHumidity,
+              THRESHOLDS.airHumidity,
+              latestTimestamp
+            );
+            if (airHumidityNotification) newNotifications.push(airHumidityNotification);
+
+            const airTempNotification = generateNotification(
+              "Air Temp",
+              latestReading.airTemperature,
+              THRESHOLDS.airTemperature,
+              latestTimestamp
+            );
+            if (airTempNotification) newNotifications.push(airTempNotification);
+
+            // Merge with existing notifications, avoiding duplicates
+            setNotifications(prevNotifications => {
+              // Keep existing read notifications
+              const existingReadNotifications = prevNotifications.filter(n => n.read);
+
+              // Combine new notifications with existing read ones
+              return [...newNotifications, ...existingReadNotifications];
+            });
+          }
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Database error:", error);
+        setLoading(false);
+      }
+    );
+
+    // Clean up the listener
+    return () => unsubscribe();
+  }, []);
 
   const moveNotificationToHistory = (id: string) => {
     setNotifications(
@@ -181,7 +312,11 @@ export default function Notifications() {
             )}
           </View>
 
-          {getFilteredNotifications().length > 0 ? (
+          {loading ? (
+            <View className="py-16 items-center bg-white rounded-xl shadow-sm">
+              <Text className="text-gray-500 mt-4 text-lg">Loading notifications...</Text>
+            </View>
+          ) : getFilteredNotifications().length > 0 ? (
             <FlatList
               data={getFilteredNotifications()}
               renderItem={renderNotificationItem}

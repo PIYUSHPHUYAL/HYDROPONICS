@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, get, child, set } from 'firebase/database';
 import "firebase/database";
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth, signInAnonymously, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
@@ -21,10 +22,15 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
-const auth = getAuth(app);
+
+// Initialize Auth with AsyncStorage persistence
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+});
 
 signInAnonymously(auth).catch(error => {
   console.error("Authentication error:", error);
 });
 
-export { database, ref, onValue, get, child, auth, set  };
+export { database, ref, onValue, get, child, auth, set };
+// export default FirebaseScreen;

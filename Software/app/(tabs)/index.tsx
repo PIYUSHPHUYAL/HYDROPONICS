@@ -5,6 +5,7 @@ import { useRouter } from "expo-router"
 import { useState, useEffect, useRef } from "react"
 import { database, ref, onValue } from "./firebase" // Import from your firebase.js file
 import { Linking } from "react-native"
+import { IconButton } from 'react-native-paper';
 
 export default function Index() {
   const router = useRouter()
@@ -14,9 +15,8 @@ export default function Index() {
     sunlight: "45%",
     EC: "--",
     moisture: "14%",
-    temperature: "--",
-    airHumidity: "--",
     airTemperature: "--",
+    temperature: "--",
   })
   const [loading, setLoading] = useState(true)
   const [currentTipIndex, setCurrentTipIndex] = useState(0)
@@ -95,16 +95,21 @@ export default function Index() {
           })
 
           if (latestReading) {
+            // Define a conversion factor (adjust based on your water type)
+            const conversionFactor = 0.67; // Example: General freshwater
+
+            // Calculate EC from TDS
+            const calculatedEC = latestReading.tds ? (parseFloat(latestReading.tds) / conversionFactor).toFixed(0) : "--";
+
             // Update the state with the fetched data
             setSensorData({
               pH: latestReading.pH?.toFixed(2) || "--",
-              nutrient: "ok", // Keeping static
-              sunlight: "45%", // Keeping static
-              EC: latestReading.tds?.toFixed(0) || "--", // Using TDS as EC
-              moisture: "14%", // Keeping static
-              temperature: latestReading.waterTemperature?.toFixed(0) || "--",
-              airHumidity: latestReading.airHumidity?.toFixed(0) || "--",
+              nutrient: latestReading.tds?.toFixed(0) || "--",
+              sunlight: latestReading.ldr?.toFixed(0) || "--",
+              EC: calculatedEC,
+              moisture: latestReading.airHumidity?.toFixed(0) || "--",
               airTemperature: latestReading.airTemperature?.toFixed(1) || "--",
+              temperature: latestReading.waterTemperature?.toFixed(0) || "--",
             })
           }
         }
@@ -237,21 +242,31 @@ export default function Index() {
             {/* Moisture */}
             <View className="flex-1 mr-2 p-5 border border-gray-200 rounded-xl items-center">
               <View className="w-10 h-10 mb-3 items-center justify-center">
-                <Ionicons name="water-outline" size={28} color="#0088FF" />
+                <Ionicons name="rainy-outline" size={28} color="#0088FF" />
               </View>
               <Text className="text-2xl font-bold">{sensorData.moisture}</Text>
               <Text className="text-gray-500 text-sm">moisture</Text>
             </View>
 
-            {/* Temperature (water) */}
+            {/* Temperature (air) */}
             <View className="flex-1 ml-2 p-5 border border-gray-200 rounded-xl items-center">
               <View className="w-10 h-10 mb-3 items-center justify-center">
                 <Ionicons name="thermometer-outline" size={28} color="#FF9800" />
               </View>
-              <Text className="text-2xl font-bold">{sensorData.temperature}°</Text>
-              <Text className="text-gray-500 text-sm">temperature(H)</Text>
+              <Text className="text-2xl font-bold">{sensorData.airTemperature}°</Text>
+              <Text className="text-gray-500 text-sm">temperature(air)</Text>
             </View>
+
           </View>
+          <View className="flex-row mb-5"></View>
+          {/* Temperature (water) */}
+          <View className="flex-1  p-5 border border-gray-200 rounded-xl items-center">
+              <View className="w-10 h-10 mb-3 items-center justify-center">
+                <IconButton icon="coolant-temperature" size={30} />
+              </View>
+              <Text className="text-2xl font-bold">{sensorData.temperature}°</Text>
+              <Text className="text-gray-500 text-sm">temperature(H₂O)</Text>
+            </View>
         </View>
 
         {/* Add some bottom padding to account for the tab bar */}
