@@ -28,7 +28,7 @@ const _Layout = () => {
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "white" }}>
         <Animated.Image
           source={require("../../assets12345/Welcome_screen.png")}
-          style={{ width: 250, height: 250, opacity: splashOpacity }}
+          style={{ width: 300, height: 300, opacity: splashOpacity, top: -25 }}
         />
       </View>
     );

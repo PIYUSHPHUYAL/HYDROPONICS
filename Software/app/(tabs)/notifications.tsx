@@ -26,12 +26,12 @@ interface Notification {
 // Define threshold values for different parameters
 const THRESHOLDS = {
   pH: {
-    critical: { min: 6.0, max: 7.5 },
-    warning: { min: 6.2, max: 7.2 }
+    critical: { min: 4.0, max: 8.0 },
+    warning: { min: 5.0, max: 7.0 }
   },
   tds: {
-    warning: { min: 500 },
-    critical: { max: 1500 }
+    warning: { min: 300 },
+    critical: { max: 2500 }
   },
   waterTemperature: {
     warning: { min: 18 },

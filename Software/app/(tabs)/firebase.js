@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, get, child, set } from 'firebase/database';
+import { getDatabase, ref, onValue, get, child, set, query, limitToLast, orderByKey } from 'firebase/database';
 import "firebase/database";
 import { getAuth, signInAnonymously, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
@@ -32,5 +32,9 @@ signInAnonymously(auth).catch(error => {
   console.error("Authentication error:", error);
 });
 
-export { database, ref, onValue, get, child, auth, set };
+export { database, ref, onValue, get, child, auth, set, query, limitToLast, orderByKey };
 // export default FirebaseScreen;
+
+
+//////////////////////////// READINGS NODE UDAUNI CODE//////////////
+// & "C:\Program Files\Git\mingw64\bin\curl.exe" -X DELETE 'https://hydroponics-a6609-default-rtdb.firebaseio.com/readings.json?auth=VV8EYMNj7ibBlw79AWwkD3IGkljPbkGLoI7EFSY1'

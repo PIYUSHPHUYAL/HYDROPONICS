@@ -11,10 +11,10 @@ export default function Index() {
   const router = useRouter()
   const [sensorData, setSensorData] = useState({
     pH: "--",
-    nutrient: "ok",
-    sunlight: "45%",
+    nutrient: "--",
+    sunlight: "--",
     EC: "--",
-    moisture: "14%",
+    humidity: "--",
     airTemperature: "--",
     temperature: "--",
   })
@@ -107,7 +107,7 @@ export default function Index() {
               nutrient: latestReading.tds?.toFixed(0) || "--",
               sunlight: latestReading.ldr?.toFixed(0) || "--",
               EC: calculatedEC,
-              moisture: latestReading.airHumidity?.toFixed(0) || "--",
+              humidity: latestReading.airHumidity?.toFixed(0) || "--",
               airTemperature: latestReading.airTemperature?.toFixed(1) || "--",
               temperature: latestReading.waterTemperature?.toFixed(0) || "--",
             })
@@ -239,13 +239,13 @@ export default function Index() {
           </View>
 
           <View className="flex-row">
-            {/* Moisture */}
+            {/* Humidity */}
             <View className="flex-1 mr-2 p-5 border border-gray-200 rounded-xl items-center">
               <View className="w-10 h-10 mb-3 items-center justify-center">
                 <Ionicons name="rainy-outline" size={28} color="#0088FF" />
               </View>
-              <Text className="text-2xl font-bold">{sensorData.moisture}</Text>
-              <Text className="text-gray-500 text-sm">moisture</Text>
+              <Text className="text-2xl font-bold">{sensorData.humidity}%</Text>
+              <Text className="text-gray-500 text-sm">humidity</Text>
             </View>
 
             {/* Temperature (air) */}
@@ -253,7 +253,7 @@ export default function Index() {
               <View className="w-10 h-10 mb-3 items-center justify-center">
                 <Ionicons name="thermometer-outline" size={28} color="#FF9800" />
               </View>
-              <Text className="text-2xl font-bold">{sensorData.airTemperature}°</Text>
+              <Text className="text-2xl font-bold">{sensorData.airTemperature}°C</Text>
               <Text className="text-gray-500 text-sm">temperature(air)</Text>
             </View>
 
@@ -264,7 +264,7 @@ export default function Index() {
               <View className="w-10 h-10 mb-3 items-center justify-center">
                 <IconButton icon="coolant-temperature" size={30} />
               </View>
-              <Text className="text-2xl font-bold">{sensorData.temperature}°</Text>
+              <Text className="text-2xl font-bold">{sensorData.temperature}°C</Text>
               <Text className="text-gray-500 text-sm">temperature(H₂O)</Text>
             </View>
         </View>

@@ -11,6 +11,10 @@
 #include "WiFiProv.h"
 #include "sdkconfig.h"
 
+
+#define RESET_BUTTON_PIN 27
+
+
 // WiFi Provisioning Configuration
 const char *pop = "abcd1234";           // Proof of possession (PIN)
 const char *service_name = "PROV_hydro"; // Device name
@@ -136,7 +140,9 @@ void setup() {
     // Initialize sensors
     dht.begin();
     waterTempSensor.begin();
-    
+
+    pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
+
     pinMode(ldrPin, INPUT);
     pinMode(trigPin, OUTPUT);
     pinMode(echoPin, INPUT);
@@ -183,6 +189,14 @@ long measureDistance() {
 }
 
 void loop() {
+
+    if (digitalRead(RESET_BUTTON_PIN) == LOW) {
+    Serial.println("Reset button pressed! Erasing WiFi credentials...");
+    WiFi.disconnect(true, true);
+    ESP.restart();
+    }
+
+
     // Wait for WiFi connection
     if (!wifiConnected) {
         delay(1000);
@@ -258,22 +272,25 @@ void loop() {
         timeClient.update();
         unsigned long timestamp = timeClient.getEpochTime();
 
-        // Print sensor readings
+        /// Print sensor readings horizontally
         Serial.print("Air Temperature: ");
         Serial.print(airTemperature);
-        Serial.println(" °C");
+        Serial.print(" °C, ");
         Serial.print("Air Humidity: ");
         Serial.print(airHumidity);
-        Serial.println(" %");
+        Serial.print(" %, ");
         Serial.print("Water Temperature: ");
         Serial.print(waterTemperature);
-        Serial.println(" °C");
+        Serial.print(" °C, ");
         Serial.print("LDR Value: ");
-        Serial.println(ldrValue);
+        Serial.print(ldrValue);
+        Serial.print(", ");
         Serial.print("Distance: ");
-        Serial.println(distance);
+        Serial.print(distance);
+        Serial.print(", ");
         Serial.print("pH Value: ");
-        Serial.println(pH);
+        Serial.print(pH);
+        Serial.print(", ");
         Serial.print("TDS Value: ");
         Serial.print(tds, 2);
         Serial.println(" ppm");
