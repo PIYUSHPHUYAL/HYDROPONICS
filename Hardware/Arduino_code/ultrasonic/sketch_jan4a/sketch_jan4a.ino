@@ -11,6 +11,10 @@
 #include "WiFiProv.h"
 #include "sdkconfig.h"
 
+
+#define RESET_BUTTON_PIN 27
+
+
 // WiFi Provisioning Configuration
 const char *pop = "abcd1234";           // Proof of possession (PIN)
 const char *service_name = "PROV_hydro"; // Device name
@@ -42,6 +46,7 @@ const int trigPin = 5;
 const int echoPin = 18;
 const int phSensorPin = 35;
 const int tdsSensorPin = 32;
+const int relayPin = 26;  // Connect to the IN pin of the relay
 
 // TDS sensor configuration
 #define VREF 3.3
@@ -112,18 +117,39 @@ void initFirebase() {
     Firebase.reconnectWiFi(true);
 }
 
+// Function to control the pump
+void controlPump(bool state) {
+    digitalWrite(relayPin, state ? HIGH : LOW);
+    
+    // Log pump state to Firebase
+    if (Firebase.ready() && signupOK) {
+        if (Firebase.RTDB.setBool(&fbdo, "/pumpStatus", state)) {
+            Serial.println("Pump status updated in Firebase");
+        } else {
+            Serial.println("Failed to update pump status: " + fbdo.errorReason());
+        }
+    }
+    
+    Serial.print("Pump is now: ");
+    Serial.println(state ? "ON" : "OFF");
+}
+
 void setup() {
     Serial.begin(115200);
     
     // Initialize sensors
     dht.begin();
     waterTempSensor.begin();
-    
+
+    pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
+
     pinMode(ldrPin, INPUT);
     pinMode(trigPin, OUTPUT);
     pinMode(echoPin, INPUT);
     pinMode(phSensorPin, INPUT);
     pinMode(tdsSensorPin, INPUT);
+    pinMode(relayPin, OUTPUT);
+    digitalWrite(relayPin, LOW);  // Ensure the pump is OFF initially
 
     // Start WiFi provisioning
     WiFi.onEvent(SysProvEvent);
@@ -145,6 +171,9 @@ void setup() {
     
     WiFiProv.printQR(service_name, pop, "ble");
     timeClient.begin();
+    
+    // Initialize pump status in Firebase once we're connected
+    Serial.println("Initializing... Pump is OFF by default");
 }
 
 long measureDistance() {
@@ -160,6 +189,14 @@ long measureDistance() {
 }
 
 void loop() {
+
+    if (digitalRead(RESET_BUTTON_PIN) == LOW) {
+    Serial.println("Reset button pressed! Erasing WiFi credentials...");
+    WiFi.disconnect(true, true);
+    ESP.restart();
+    }
+
+
     // Wait for WiFi connection
     if (!wifiConnected) {
         delay(1000);
@@ -169,9 +206,40 @@ void loop() {
     // Initialize Firebase if not already done
     if (!signupOK && wifiConnected) {
         initFirebase();
+        // Initialize pump status in Firebase once we're connected
+        if (signupOK) {
+            controlPump(false); // Ensure pump status is synced with the default OFF state
+        }
     }
 
-    // Only proceed if Firebase is ready and we're connected
+    // Process any serial commands for manual pump control (for testing)
+    if (Serial.available() > 0) {
+        char input = Serial.read();
+        if (input == '1') {
+            Serial.println("Manual command: Turning pump ON");
+            controlPump(true);
+        } else if (input == '0') {
+            Serial.println("Manual command: Turning pump OFF");
+            controlPump(false);
+        }
+    }
+
+    // Check for pump control commands from Firebase
+    if (Firebase.ready() && signupOK) {
+        if (Firebase.RTDB.getBool(&fbdo, "/pumpCommand")) {
+            if (fbdo.dataType() == "boolean") {
+                bool pumpCommand = fbdo.boolData();
+                Serial.print("Received pump command from Firebase: ");
+                Serial.println(pumpCommand ? "ON" : "OFF");
+                controlPump(pumpCommand);
+                
+                // // Clear the command after execution (optional)
+                // Firebase.RTDB.setBool(&fbdo, "/pumpCommand", false);
+            }
+        }
+    }
+
+    // Regular sensor reading and data logging
     if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 2000 || sendDataPrevMillis == 0)) {
         sendDataPrevMillis = millis();
         
@@ -204,22 +272,25 @@ void loop() {
         timeClient.update();
         unsigned long timestamp = timeClient.getEpochTime();
 
-        // Print sensor readings
+        /// Print sensor readings horizontally
         Serial.print("Air Temperature: ");
         Serial.print(airTemperature);
-        Serial.println(" °C");
+        Serial.print(" °C, ");
         Serial.print("Air Humidity: ");
         Serial.print(airHumidity);
-        Serial.println(" %");
+        Serial.print(" %, ");
         Serial.print("Water Temperature: ");
         Serial.print(waterTemperature);
-        Serial.println(" °C");
+        Serial.print(" °C, ");
         Serial.print("LDR Value: ");
-        Serial.println(ldrValue);
+        Serial.print(ldrValue);
+        Serial.print(", ");
         Serial.print("Distance: ");
-        Serial.println(distance);
+        Serial.print(distance);
+        Serial.print(", ");
         Serial.print("pH Value: ");
-        Serial.println(pH);
+        Serial.print(pH);
+        Serial.print(", ");
         Serial.print("TDS Value: ");
         Serial.print(tds, 2);
         Serial.println(" ppm");
@@ -233,6 +304,8 @@ void loop() {
         jsonData.set("distance", distance);
         jsonData.set("pH", pH);
         jsonData.set("tds", tds);
+        // Also include current pump status
+        jsonData.set("pumpStatus", digitalRead(relayPin) == HIGH);
 
         // Send to Firebase
         String path = "/readings/" + String(timestamp);
