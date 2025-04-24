@@ -1,28 +1,63 @@
-import { View, Image, Animated } from 'react-native';
+// app/_layout.tsx
+import { View, Image, Animated, Text, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+const { width, height } = Dimensions.get('window');
+
 const _Layout = () => {
+  // States to control what to show
   const [showSplash, setShowSplash] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [currentOnboardingScreen, setCurrentOnboardingScreen] = useState(0);
+
   const splashOpacity = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    // // Set up the animation
-    // Animated.timing(splashOpacity, {
-    //   toValue: 0,
-    //   duration: 500,
-    //   useNativeDriver: true,
-    // }).start();
+  // Onboarding data
+  const onboardingScreens = [
+    {
+      id: 1,
+      title: 'Power Device',
+      subtitle: 'Connect The Device With Power',
+      image: require("../../assets12345/power.png") // Update with your actual image path
+    },
+    {
+      id: 2,
+      title: 'Wi-Fi Provisioning',
+      subtitle: 'Configure WiFi Credentials',
+      image: require("../../assets12345/wifi.png") // Update with your actual image path
+    },
+    {
+      id: 3,
+      title: 'Enter Credentials',
+      subtitle: 'Enter Your Device Credentials',
+      image: require("../../assets12345/cred.png") // Update with your actual image path
+    }
+  ];
 
-    // Hide splash screen after 2 seconds
+  // Handle splash screen timing
+  useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
+      setShowOnboarding(true);
     }, 3000);
 
     return () => clearTimeout(timer);
   }, []);
 
+  // Handle continue button press
+  const handleContinue = () => {
+    if (currentOnboardingScreen < 2) {
+      // Go to next onboarding screen
+      setCurrentOnboardingScreen(currentOnboardingScreen + 1);
+    } else {
+      // Completed all onboarding screens, show main app
+      setShowOnboarding(false);
+    }
+  };
+
+  // Render splash screen
   if (showSplash) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "white" }}>
@@ -34,6 +69,43 @@ const _Layout = () => {
     );
   }
 
+  // Render onboarding screens
+  if (showOnboarding) {
+    const currentScreen = onboardingScreens[currentOnboardingScreen];
+
+    return (
+      <SafeAreaView style={styles.fullScreenContainer}>
+        <View style={styles.contentContainer}>
+          <View style={styles.imageContainer}>
+            <Image source={currentScreen.image} style={styles.image} />
+          </View>
+
+          <Text style={styles.title}>{currentScreen.title}</Text>
+          <Text style={styles.subtitle}>{currentScreen.subtitle}</Text>
+
+          <View style={styles.pagination}>
+            {onboardingScreens.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.paginationDot,
+                  index === currentOnboardingScreen && styles.paginationDotActive
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity style={styles.button} onPress={handleContinue}>
+            <Text style={styles.buttonText}>Continue</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Render main app with tabs
   return (
     <Tabs
       screenOptions={{
@@ -125,5 +197,74 @@ const _Layout = () => {
     </Tabs>
   );
 };
+
+const styles = StyleSheet.create({
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    justifyContent: 'space-between',
+  },
+  contentContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 30,
+  },
+  imageContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 40,
+  },
+  image: {
+    width: 150,
+    height: 150,
+    resizeMode: 'contain',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  pagination: {
+    flexDirection: 'row',
+    marginTop: 20,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ddd',
+    marginHorizontal: 4,
+  },
+  paginationDotActive: {
+    backgroundColor: '#4CAF50',
+  },
+  buttonContainer: {
+    alignItems: 'center',
+    paddingBottom: 40,
+  },
+  button: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    width: 180,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#333',
+    fontWeight: '500',
+    fontSize: 16,
+  },
+});
 
 export default _Layout;

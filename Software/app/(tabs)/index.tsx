@@ -17,6 +17,7 @@ export default function Index() {
     humidity: "--",
     airTemperature: "--",
     temperature: "--",
+    lastUpdated: "--",
   })
   const [loading, setLoading] = useState(true)
   const [currentTipIndex, setCurrentTipIndex] = useState(0)
@@ -47,7 +48,6 @@ export default function Index() {
         "https://images.unsplash.com/photo-1591857177580-dc82b9ac4e1e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8NXx8cGxhbnQlMjBudXRyaWVudHN8ZW58MHx8MHx8&auto=format&fit=crop&w=800&q=60",
       videoUrl: "https://youtu.be/tI2K45je-Rw?si=Ym3ajVYfr3PsUDzy",
     },
-
   ]
 
   // Auto-scroll functionality
@@ -75,51 +75,40 @@ export default function Index() {
 
   useEffect(() => {
     // Reference to the readings node
-    const readingsRef = ref(database, "readings")
+    const readingsRef = ref(database, "readings/current")
 
-    // Set up the listener
-    const unsubscribe = onValue(
-      readingsRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          // Get the latest reading (assuming readings are ordered by timestamp)
-          let latestReading = null
-          let latestTimestamp = 0
+    onValue(readingsRef, (snapshot) => {
+      const data = snapshot.val()
+      if (data) {
+        // conversion factor, EC calc, etc.
+        const conversionFactor = 0.67
+        const calculatedEC = data.tds
+          ? (parseFloat(data.tds) / conversionFactor).toFixed(0)
+          : "--"
 
-          snapshot.forEach((childSnapshot) => {
-            const key = Number.parseInt(childSnapshot.key)
-            if (key > latestTimestamp) {
-              latestTimestamp = key
-              latestReading = childSnapshot.val()
-            }
-          })
+        // format lastUpdated exactly how you like
+        let [h, m, s] = data.time?.split(":").map(Number) || [0,0,0]
+        const ampm = h >= 12 ? "PM" : "AM"
+        h = h % 12 || 12
+        const today = new Date(data.timestamp * 1000) // if you stored Unix secs
+        const lastUpdated = `${today.getMonth()+1}/${today.getDate()}/${today.getFullYear()} ${h}:${m.toString().padStart(2,"0")} ${ampm}`
 
-          if (latestReading) {
-            // Define a conversion factor (adjust based on your water type)
-            const conversionFactor = 0.67; // Example: General freshwater
-
-            // Calculate EC from TDS
-            const calculatedEC = latestReading.tds ? (parseFloat(latestReading.tds) / conversionFactor).toFixed(0) : "--";
-
-            // Update the state with the fetched data
-            setSensorData({
-              pH: latestReading.pH?.toFixed(2) || "--",
-              nutrient: latestReading.tds?.toFixed(0) || "--",
-              sunlight: latestReading.ldr?.toFixed(0) || "--",
-              EC: calculatedEC,
-              humidity: latestReading.airHumidity?.toFixed(0) || "--",
-              airTemperature: latestReading.airTemperature?.toFixed(1) || "--",
-              temperature: latestReading.waterTemperature?.toFixed(0) || "--",
-            })
-          }
-        }
-        setLoading(false)
-      },
-      (error) => {
-        console.error("Database error:", error)
-        setLoading(false)
-      },
-    )
+        setSensorData({
+          pH:   data.pH?.toFixed(2)           || "--",
+          nutrient: data.tds?.toFixed(0)      || "--",
+          sunlight: data.ldr?.toFixed(0)      || "--",
+          EC: calculatedEC,
+          humidity: data.airHumidity?.toFixed(0)   || "--",
+          airTemperature: data.airTemperature?.toFixed(1) || "--",
+          temperature: data.waterTemperature?.toFixed(0)   || "--",
+          lastUpdated,
+        })
+      }
+      setLoading(false)
+    }, (error) => {
+      console.error("RTDB error:", error)
+      setLoading(false)
+    })
 
     // Clean up the listener
     return () => unsubscribe()
@@ -136,7 +125,7 @@ export default function Index() {
       {/* Header */}
       <View className="flex-row justify-between items-center px-5 pt-4 pb-2">
         <View style={{ transform: [{ translateX: 110 }] }} className="flex-row items-center">
-          <Image source={require("../../assets12345/logo.png")} className="w-8 h-8 mr-2" />
+          <Image source={require("../../assets12345/logo.png")} className="w-8 h-8 mr-3 relative -top-[3px] -left-[-6px]" />
           <Text className="text-lg font-semibold text-green-500">Hey Piyush!</Text>
         </View>
         <TouchableOpacity onPress={goToNotifications}>
@@ -256,17 +245,28 @@ export default function Index() {
               <Text className="text-2xl font-bold">{sensorData.airTemperature}°C</Text>
               <Text className="text-gray-500 text-sm">temperature(air)</Text>
             </View>
-
           </View>
+
           <View className="flex-row mb-5"></View>
           {/* Temperature (water) */}
-          <View className="flex-1  p-5 border border-gray-200 rounded-xl items-center">
-              <View className="w-10 h-10 mb-3 items-center justify-center">
-                <IconButton icon="coolant-temperature" size={30} />
-              </View>
-              <Text className="text-2xl font-bold">{sensorData.temperature}°C</Text>
-              <Text className="text-gray-500 text-sm">temperature(H₂O)</Text>
+          <View className="flex-1 p-5 border border-gray-200 rounded-xl items-center">
+            <View className="w-10 h-10 mb-3 items-center justify-center">
+              <IconButton icon="coolant-temperature" size={30} />
             </View>
+            <Text className="text-2xl font-bold">
+              {sensorData.temperature}°C
+            </Text>
+            <Text className="text-gray-500 text-sm">
+              temperature(H₂O)
+            </Text>
+          </View>
+
+          {/* Last updated line */}
+          {sensorData.lastUpdated !== "--" && (
+            <Text className="text-gray-400 text-xs mt-1" style={{ textAlign: "center" }}>
+              Last updated: {sensorData.lastUpdated}
+            </Text>
+          )}
         </View>
 
         {/* Add some bottom padding to account for the tab bar */}
@@ -275,4 +275,3 @@ export default function Index() {
     </SafeAreaView>
   )
 }
-

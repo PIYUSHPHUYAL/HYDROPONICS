@@ -1,8 +1,8 @@
-import { View, Text, TouchableOpacity, SafeAreaView, ScrollView, Switch, Alert } from "react-native"
+import { View, Text, TouchableOpacity, SafeAreaView, ScrollView, Switch, Alert, Linking } from "react-native"
 import { useState } from "react"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import Slider from '@react-native-community/slider';
+
 
 const Settings = () => {
   const router = useRouter()
@@ -26,7 +26,6 @@ const Settings = () => {
 
   // Theme settings
   const [themeSettings, setThemeSettings] = useState({
-    darkMode: false,
     fontSize: 1, // 0.8 to 1.2
   })
 
@@ -61,6 +60,47 @@ const Settings = () => {
         onPress: () => console.log("User logged out"),
       },
     ])
+  }
+
+  // Function to show contact email alert
+  const showContactAlert = () => {
+    Alert.alert(
+      "Contact Information",
+      "Kindly put your concern to mail address piyushphuyal77@gmail.com",
+      [
+        { text: "OK", onPress: () => console.log("OK Pressed") }
+      ]
+    )
+  }
+
+  // Function to show contact email alert
+  const showComingSoonAlert = () => {
+    Alert.alert(
+      "Coming Soon",
+      "This feature is coming soon! Stay tuned for updates.",
+      [
+        { text: "OK", onPress: () => console.log("OK Pressed") }
+      ]
+    )
+  }
+
+  // Function to open YouTube tutorial
+  const openTutorial = async () => {
+    // YouTube URL for a hydroponics tutorial
+    const youtubeUrl = "https://youtu.be/eEw9iv2K3Pc?si=4PadWVq8-Hh_Ttaa";
+
+    // Check if the URL can be opened
+    const canOpen = await Linking.canOpenURL(youtubeUrl);
+
+    if (canOpen) {
+      await Linking.openURL(youtubeUrl);
+    } else {
+      Alert.alert(
+        "Cannot Open Link",
+        "Unable to open YouTube. Please make sure you have YouTube installed or a web browser that can access YouTube.",
+        [{ text: "OK" }]
+      );
+    }
   }
 
   const renderSectionHeader = (icon, title, section) => (
@@ -116,17 +156,14 @@ const Settings = () => {
   )
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-200" style={{ top:1.5 }}>
-        <Text className="text-xl font-semibold">Settings</Text>
-        <TouchableOpacity onPress={goToNotifications}>
-          <View className="relative">
-            <Ionicons name="notifications-outline" size={24} color="black" />
-            <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></View>
-
+        <SafeAreaView className="flex-1 bg-white">
+          <View style={{ position: 'absolute', top: 63, right: 17.5, zIndex: 10 }}>
+            <TouchableOpacity onPress={() => router.push("/notifications")}>
+              <Ionicons name="notifications-outline" size={24} color="black" />
+              <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </View>
+          <Text className="text-2xl font-bold text-center mb-6 my-4">Settings</Text>
 
       <ScrollView className="flex-1 px-4">
         {/* Notification Preferences */}
@@ -147,7 +184,6 @@ const Settings = () => {
                 { label: "Day Only (8AM-10PM)", value: "day" },
                 { label: "Night Only (10PM-8AM)", value: "night" },
               ])}
-
             </View>
           )}
         </View>
@@ -170,7 +206,7 @@ const Settings = () => {
                   </TouchableOpacity>
                   <TouchableOpacity
                     className={`flex-1 p-2 border ${units.system === "imperial" ? "bg-blue-100 border-blue-300" : "border-gray-200"} rounded-r-md`}
-                    onPress={() => setUnits({ ...units, system: "imperial" })}
+                    onPress={showComingSoonAlert}
                   >
                     <Text className={`text-center ${units.system === "imperial" ? "font-medium text-blue-700" : ""}`}>
                       Imperial (°F, in)
@@ -181,8 +217,7 @@ const Settings = () => {
 
               {renderSelectItem("Language", "en", [
                 { label: "English", value: "en" },
-                { label: "Español", value: "es" },
-                { label: "Français", value: "fr" },
+                { label: "Nepali", value: "np" },
               ])}
             </View>
           )}
@@ -193,18 +228,15 @@ const Settings = () => {
           {renderSectionHeader("shield-outline", "Account & Security", "account")}
           {expandedSections.account && (
             <View className="py-2 space-y-4">
-              <TouchableOpacity className="flex-row items-center p-3 bg-blue-50 rounded-md">
+              <TouchableOpacity
+                className="flex-row items-center p-3 bg-blue-50 rounded-md"
+                onPress={showContactAlert}
+              >
                 <Ionicons name="wifi-outline" size={18} color="#3b82f6" style={{ marginRight: 8 }} />
                 <Text className="text-blue-700 font-medium">Request POP Change</Text>
               </TouchableOpacity>
 
-              {renderSwitchItem(
-                "analytics-outline",
-                "Share Data",
-                privacySettings.shareData,
-                (value) => setPrivacySettings({ ...privacySettings, shareData: value }),
-                "Help improve the app by sharing anonymous usage data",
-              )}
+              {/* "Share Data" section removed as requested */}
             </View>
           )}
         </View>
@@ -214,48 +246,25 @@ const Settings = () => {
           {renderSectionHeader("options-outline", "Additional Features", "additional")}
           {expandedSections.additional && (
             <View className="py-2 space-y-4">
-              {renderSwitchItem("moon-outline", "Dark Mode", themeSettings.darkMode, (value) =>
-                setThemeSettings({ ...themeSettings, darkMode: value }),
-              )}
+              {/* "Dark Mode" section removed as requested */}
 
-              <View>
-                <View className="flex-row justify-between mb-1">
-                  <Text className="text-sm font-medium">Font Size</Text>
-                  <Text className="text-sm">
-                    {themeSettings.fontSize === 0.8 ? "Small" : themeSettings.fontSize === 1 ? "Medium" : "Large"}
-                  </Text>
-                </View>
-                <View className="flex-row items-center">
-                  <Text className="text-xs">A</Text>
-                  <Slider
-                    style={{ flex: 1, height: 40, marginHorizontal: 8 }}
-                    minimumValue={0.8}
-                    maximumValue={1.2}
-                    step={0.2}
-                    value={themeSettings.fontSize}
-                    onValueChange={(value) => setThemeSettings({ ...themeSettings, fontSize: value })}
-                    minimumTrackTintColor="#3b82f6"
-                    maximumTrackTintColor="#d1d5db"
-                    thumbTintColor="#3b82f6"
-                  />
-                  <Text className="text-base font-bold">A</Text>
-                </View>
-              </View>
-
-              <TouchableOpacity className="flex-row items-center p-3 border border-gray-200 rounded-md">
+              <TouchableOpacity
+                className="flex-row items-center p-3 border border-gray-200 rounded-md"
+                onPress={openTutorial}
+              >
                 <Ionicons name="book-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
                 <Text>View Tutorial</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity className="flex-row items-center p-3 border border-gray-200 rounded-md">
+              <TouchableOpacity
+                className="flex-row items-center p-3 border border-gray-200 rounded-md"
+                onPress={showContactAlert}
+              >
                 <Ionicons name="chatbox-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
                 <Text>Send Feedback</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity className="flex-row items-center p-3 border border-gray-200 rounded-md">
-                <Ionicons name="refresh-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
-                <Text>Check for Updates</Text>
-              </TouchableOpacity>
+              {/* "Check for Updates" section removed as requested */}
             </View>
           )}
         </View>
@@ -270,7 +279,10 @@ const Settings = () => {
                 <Text className="text-sm font-medium">1.0.0</Text>
               </View>
 
-              <TouchableOpacity className="flex-row items-center p-3 border border-gray-200 rounded-md">
+              <TouchableOpacity
+                className="flex-row items-center p-3 border border-gray-200 rounded-md"
+                onPress={showContactAlert}
+              >
                 <Ionicons name="mail-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
                 <Text>Contact Support</Text>
               </TouchableOpacity>
@@ -296,4 +308,3 @@ const Settings = () => {
 }
 
 export default Settings
-
