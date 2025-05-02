@@ -1,222 +1,214 @@
-import { View, Text, TouchableOpacity, SafeAreaView, Dimensions, ScrollView, ActivityIndicator } from 'react-native';
-import React, { useState, useEffect, useMemo } from 'react';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { LineChart } from 'react-native-chart-kit';
-import { database, ref, onValue } from './firebase';
+import { View, Text, TouchableOpacity, SafeAreaView, Dimensions, ScrollView, ActivityIndicator } from "react-native"
+import { useState, useEffect, useMemo } from "react"
+import { Ionicons } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
+import { Calendar, type DateData } from "react-native-calendars"
+import { database, ref, onValue } from "./firebase"
 
 // Constants
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const CHART_MARGIN = 40;
-const CHART_WIDTH = SCREEN_WIDTH - CHART_MARGIN;
-const MAX_DATA_POINTS = 10;
-const EC_SCALE_FACTOR = 500;
-const NPT_OFFSET = { hours: 5, minutes: 45 };
+const SCREEN_WIDTH = Dimensions.get("window").width
 
 // Types
-interface Reading {
-  timestamp: number;
-  pH: number;
-  tds: number;
-  waterTemperature: number;
-  airTemperature: number;
+interface DailyReading {
+  pH: number
+  tds: number
+  airTemperature: number
+  airHumidity: number
+  ldr: number
+  waterTemperature: number
+  date: string
+  time?: string
 }
 
-interface HistoricalData {
-  timestamps: string[];
-  pH: number[];
-  ec: number[];
-  waterTemp: number[];
-  airTemp: number[];
+interface DayAverageData {
+  date: string
+  avgPH: number
+  avgTDS: number
+  avgAirTemp: number
+  avgAirHumidity: number
+  avgLDR: number
+  avgWaterTemp: number
+  readingsCount: number
+}
+
+interface MarkedDates {
+  [date: string]: {
+    marked: boolean
+    dotColor?: string
+    selected?: boolean
+    selectedColor?: string
+  }
 }
 
 const Visualization = () => {
-  const router = useRouter();
-  const [historicalData, setHistoricalData] = useState<HistoricalData>({
-    timestamps: [],
-    pH: [],
-    ec: [],
-    waterTemp: [],
-    airTemp: []
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Convert TDS to EC
-  const calculateEC = (tds: number): number => {
-    const conversionFactor = 0.67;
-    return tds ? (parseFloat(tds.toString()) / conversionFactor) : 0;
-  };
-
-  // Format timestamp to NPT
-  const formatToNPT = (timestamp: number): string => {
-    const date = new Date(timestamp * 1000);
-    let hoursUTC = date.getUTCHours();
-    let minutesUTC = date.getUTCMinutes();
-    const secondsUTC = date.getUTCSeconds();
-
-    // Add NPT offset
-    let hoursNPT = (hoursUTC + NPT_OFFSET.hours) % 24;
-    let minutesNPT = minutesUTC + NPT_OFFSET.minutes;
-
-    if (minutesNPT >= 60) {
-      hoursNPT = (hoursNPT + 1) % 24;
-      minutesNPT -= 60;
-    }
-
-    return `${hoursNPT.toString().padStart(2, '0')}:${minutesNPT.toString().padStart(2, '0')}:${secondsUTC.toString().padStart(2, '0')}`;
-  };
+  const router = useRouter()
+  const [dailyAverages, setDailyAverages] = useState<DayAverageData[]>([])
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const readingsRef = ref(database, "readings");
+    const dailyReadingsRef = ref(database, "daily_readings")
 
     const unsubscribe = onValue(
-      readingsRef,
+      dailyReadingsRef,
       (snapshot) => {
         try {
           if (!snapshot.exists()) {
-            setError("No data available");
-            return;
+            setError("No data available")
+            setLoading(false)
+            return
           }
 
-          const readings: Reading[] = [];
+          const readings: Record<string, DailyReading[]> = {}
+
+          // Group readings by date
           snapshot.forEach((childSnapshot) => {
-            readings.push({
-              timestamp: parseInt(childSnapshot.key || "0"),
-              ...childSnapshot.val()
-            });
-          });
+            const date = childSnapshot.child("date").val() || "Unknown"
 
-          // Process recent readings
-          const recentReadings = readings
-            .sort((a, b) => a.timestamp - b.timestamp)
-            .slice(-MAX_DATA_POINTS);
+            const readingData = {
+              pH: childSnapshot.child("pH").val() || 0,
+              tds: childSnapshot.child("tds").val() || 0,
+              airTemperature: childSnapshot.child("airTemperature").val() || 0,
+              airHumidity: childSnapshot.child("airHumidity").val() || 0,
+              ldr: childSnapshot.child("ldr").val() || 0,
+              waterTemperature: childSnapshot.child("waterTemperature").val() || 0,
+              date: date,
+              time: childSnapshot.child("time").val() || "",
+            }
 
-          const processedData = recentReadings.reduce((acc, reading) => {
-            const timeStr = formatToNPT(reading.timestamp);
+            // Initialize the array for this date if it doesn't exist
+            if (!readings[date]) {
+              readings[date] = []
+            }
+
+            // Add the reading to the appropriate day
+            readings[date].push(readingData)
+          })
+
+          if (Object.keys(readings).length === 0) {
+            setError("No data available")
+            setLoading(false)
+            return
+          }
+
+          // Calculate averages for each day
+          const averagesByDay: DayAverageData[] = Object.entries(readings).map(([date, dayReadings]) => {
+            const avgPH = dayReadings.reduce((sum, reading) => sum + reading.pH, 0) / dayReadings.length
+            const avgTDS = dayReadings.reduce((sum, reading) => sum + reading.tds, 0) / dayReadings.length
+            const avgAirTemp =
+              dayReadings.reduce((sum, reading) => sum + reading.airTemperature, 0) / dayReadings.length
+            const avgAirHumidity =
+              dayReadings.reduce((sum, reading) => sum + reading.airHumidity, 0) / dayReadings.length
+            const avgLDR = dayReadings.reduce((sum, reading) => sum + reading.ldr, 0) / dayReadings.length
+            const avgWaterTemp =
+              dayReadings.reduce((sum, reading) => sum + (reading.waterTemperature || 0), 0) / dayReadings.length
+
             return {
-              timestamps: [...acc.timestamps, timeStr],
-              pH: [...acc.pH, reading.pH || 0],
-              ec: [...acc.ec, calculateEC(reading.tds)],
-              waterTemp: [...acc.waterTemp, reading.waterTemperature || 0],
-              airTemp: [...acc.airTemp, reading.airTemperature || 0]
-            };
-          }, { timestamps: [], pH: [], ec: [], waterTemp: [], airTemp: [] } as HistoricalData);
+              date,
+              avgPH,
+              avgTDS,
+              avgAirTemp,
+              avgAirHumidity,
+              avgLDR,
+              avgWaterTemp,
+              readingsCount: dayReadings.length,
+            }
+          })
 
-          setHistoricalData(processedData);
-          setError(null);
+          // Sort by date (newest first)
+          averagesByDay.sort((a, b) => {
+            // Parse dates in format "YYYY-MM-DD"
+            const dateA = new Date(a.date)
+            const dateB = new Date(b.date)
+            return dateB.getTime() - dateA.getTime()
+          })
+
+          // Set the selected date to the most recent date with data
+          if (averagesByDay.length > 0 && !selectedDate) {
+            setSelectedDate(averagesByDay[0].date)
+          }
+
+          setDailyAverages(averagesByDay)
+          setError(null)
         } catch (err) {
-          setError("Error processing data");
-          console.error("Data processing error:", err);
+          setError("Error processing data")
+          console.error("Data processing error:", err)
         } finally {
-          setLoading(false);
+          setLoading(false)
         }
       },
       (error) => {
-        setError("Failed to fetch data");
-        console.error("Database error:", error);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
-
-  // Memoized chart configurations
-  const chartConfig = useMemo(() => ({
-    backgroundColor: '#ffffff',
-    backgroundGradientFrom: '#ffffff',
-    backgroundGradientTo: '#ffffff',
-    decimalPlaces: 1,
-    color: (opacity = 1) => `rgba(0, 136, 255, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-    style: { borderRadius: 16 },
-    propsForDots: { r: '4', strokeWidth: '2' },
-  }), []);
-
-  // Memoized chart data
-  const { pHECData, tempData } = useMemo(() => {
-    const labels = historicalData.timestamps.filter((_, i) => i % 2 === 0);
-    return {
-      pHECData: {
-        labels,
-        datasets: [
-          {
-            data: historicalData.pH,
-            color: (opacity = 1) => `rgba(0, 136, 255, ${opacity})`,
-            strokeWidth: 2,
-          },
-          {
-            data: historicalData.ec.map(val => val / EC_SCALE_FACTOR),
-            color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`,
-            strokeWidth: 2,
-          },
-        ],
-        legend: ['pH', 'EC (scaled)']
+        setError("Failed to fetch data")
+        console.error("Database error:", error)
+        setLoading(false)
       },
-      tempData: {
-        labels,
-        datasets: [
-          {
-            data: historicalData.waterTemp,
-            color: (opacity = 1) => `rgba(0, 136, 255, ${opacity})`,
-            strokeWidth: 2,
-          },
-          {
-            data: historicalData.airTemp,
-            color: (opacity = 1) => `rgba(255, 152, 0, ${opacity})`,
-            strokeWidth: 2,
-          },
-        ],
-        legend: ['Water Temp (°C)', 'Air Temp (°C)']
-      }
-    };
-  }, [historicalData]);
+    )
 
-  const renderChart = (title: string, subtitle: string, data: any, yAxisSuffix: string) => (
-    <View className="bg-white rounded-xl p-4 mb-6 shadow-sm border border-gray-100">
-      <Text className="text-lg font-semibold mb-2">{title}</Text>
-      <Text className="text-sm text-gray-500 mb-1">{subtitle}</Text>
-      <LineChart
-        data={data}
-        width={CHART_WIDTH}
-        height={250}
-        chartConfig={chartConfig}
-        bezier
-        style={{
-          marginVertical: 8,
-          borderRadius: 16,
-        }}
-        fromZero={false}
-        yAxisSuffix={yAxisSuffix}
-        yAxisInterval={1}
-        verticalLabelRotation={30}
-      />
-      <View className="flex-row justify-between mt-2">
-        {data.datasets.map((dataset: any, index: number) => (
-          <View key={index} className="flex-row items-center">
-            <View
-              className="w-3 h-3 rounded-full mr-1"
-              style={{ backgroundColor: dataset.color(1) }}
-            />
-            <Text className="text-xs">{data.legend[index]}</Text>
-          </View>
-        ))}
+    // Cleanup function to unsubscribe from the listener
+    return () => {
+      unsubscribe()
+    }
+  }, [])
+
+  // Create marked dates object for calendar
+  const markedDates = useMemo(() => {
+    const marked: MarkedDates = {}
+
+    // Mark all dates that have data
+    dailyAverages.forEach((day) => {
+      marked[day.date] = {
+        marked: true,
+        dotColor: "#0088ff",
+      }
+    })
+
+    // Mark the selected date
+    if (selectedDate) {
+      marked[selectedDate] = {
+        ...marked[selectedDate],
+        selected: true,
+        selectedColor: "#0088ff",
+      }
+    }
+
+    return marked
+  }, [dailyAverages, selectedDate])
+
+  // Get the selected day's data
+  const selectedDayData = useMemo(() => {
+    if (!selectedDate) return null
+    return dailyAverages.find((day) => day.date === selectedDate)
+  }, [dailyAverages, selectedDate])
+
+  const handleDateSelect = (date: DateData) => {
+    setSelectedDate(date.dateString)
+  }
+
+  const renderReadingCard = (title: string, value: number, unit: string, optimalRange: string, icon: string) => (
+    <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100">
+      <View className="flex-row justify-between items-center mb-2">
+        <Text className="text-lg font-semibold">{title}</Text>
+        <Ionicons name={icon} size={24} color="#0088ff" />
       </View>
+      <Text className="text-3xl font-bold">
+        {value.toFixed(2)} {unit}
+      </Text>
+      <Text className="text-sm text-gray-500 mt-1">Optimal: {optimalRange}</Text>
     </View>
-  );
+  )
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View style={{ position: 'absolute', top: 63, right: 17.5, zIndex: 10 }}>
+    <SafeAreaView className="flex-1 bg-gray-50">
+      <View style={{ position: "absolute", top: 63, right: 17.5, zIndex: 10 }}>
         <TouchableOpacity onPress={() => router.push("/notifications")}>
           <Ionicons name="notifications-outline" size={24} color="black" />
           <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />
         </TouchableOpacity>
       </View>
-      <Text className="text-2xl font-bold text-center mb-6 my-4">Water Quality Trends</Text>
+      <Text className="text-2xl font-bold text-center mb-6 my-4  ">Visualization</Text>
 
-      <ScrollView className="flex-1 px-4 pt-4">
+      <ScrollView className="flex-1 px-4 pt-4 mb-16">
         {loading ? (
           <View className="flex-1 justify-center items-center mt-10">
             <ActivityIndicator size="large" color="#0088ff" />
@@ -229,23 +221,76 @@ const Visualization = () => {
           </View>
         ) : (
           <>
-            {renderChart(
-              'pH & EC Trends',
-              'Optimal pH: 5.5-6.5 | Optimal EC: 1.2-2.4 mS/cm',
-              pHECData,
-              ''
-            )}
-            {renderChart(
-              'Temperature Comparison',
-              'Optimal water temp: 18-26°C',
-              tempData,
-              '°C'
+            {/* Calendar View */}
+            <View className="bg-white rounded-xl overflow-hidden shadow-sm mb-6 " style={{  top: -13, right: 3, zIndex: 10 }}>
+              <Calendar
+                markedDates={markedDates}
+                onDayPress={handleDateSelect}
+                theme={{
+                  todayTextColor: "#0088ff",
+                  arrowColor: "#0088ff",
+                  dotColor: "#0088ff",
+                  textDayFontFamily: "System",
+                  textMonthFontFamily: "System",
+                  textDayHeaderFontFamily: "System",
+                  textDayFontWeight: "400",
+                  textMonthFontWeight: "bold",
+                  textDayHeaderFontWeight: "400",
+                  textDayFontSize: 16,
+                  textMonthFontSize: 16,
+                  textDayHeaderFontSize: 14,
+                }}
+              />
+            </View>
+
+            {/* Selected Day Data */}
+            {selectedDayData ? (
+              <View className="mb-6">
+                <View className="flex-row justify-between items-center mb-4">
+                  <Text className="text-xl font-bold">Readings for {selectedDayData.date}</Text>
+                  <View className="bg-blue-100 px-3 py-1 rounded-full">
+                    <Text className="text-blue-800 font-medium">{selectedDayData.readingsCount} readings</Text>
+                  </View>
+                </View>
+
+                {renderReadingCard("pH Level", selectedDayData.avgPH, "", "5.5-6.5", "water-outline")}
+                {renderReadingCard("TDS", selectedDayData.avgTDS, "ppm", "800-1500 ppm", "flask-outline")}
+                {renderReadingCard(
+                  "Air Temperature",
+                  selectedDayData.avgAirTemp,
+                  "°C",
+                  "18-26°C",
+                  "thermometer-outline",
+                )}
+                {renderReadingCard("Air Humidity", selectedDayData.avgAirHumidity, "%", "60-70%", "water-outline")}
+                {renderReadingCard(
+                  "Light Intensity",
+                  selectedDayData.avgLDR,
+                  "lux",
+                  "Higher = brighter",
+                  "sunny-outline",
+                )}
+                {renderReadingCard(
+                  "Water Temperature",
+                  selectedDayData.avgWaterTemp,
+                  "°C",
+                  "18-22°C",
+                  "thermometer-outline",
+                )}
+              </View>
+            ) : (
+              <View className="flex-1 justify-center items-center mt-10 bg-white p-6 rounded-xl">
+                <Ionicons name="calendar-outline" size={48} color="#888" />
+                <Text className="text-gray-500 mt-4 text-center">
+                  {dailyAverages.length > 0 ? "Select a date to view readings" : "No data available for any dates"}
+                </Text>
+              </View>
             )}
           </>
         )}
       </ScrollView>
     </SafeAreaView>
-  );
-};
+  )
+}
 
-export default Visualization;
+export default Visualization

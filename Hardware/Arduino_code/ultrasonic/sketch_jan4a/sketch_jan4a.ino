@@ -11,6 +11,8 @@
 #include "WiFiProv.h"
 #include "sdkconfig.h"
 #include <time.h>
+#include <cmath> // Include for isnan() function
+
 
 #define RESET_BUTTON_PIN 27
 #define BLUE_LED_PIN 2     // Using the built-in LED on most ESP32 boards (GPIO2)
@@ -31,12 +33,12 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 // DHT11 configuration
-#define DHTPIN 4
+#define DHTPIN 19
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
 // DS18B20 configuration
-const int oneWireBus = 13;
+const int oneWireBus = 22;
 OneWire oneWire(oneWireBus);
 DallasTemperature waterTempSensor(&oneWire);
 
@@ -62,17 +64,13 @@ unsigned long resetStartTime = 0;
 // Nepal timezone offset (UTC+5:45)
 const int timeZoneOffset = 5 * 3600 + 45 * 60;
 
-// Scheduled reading times (hour, minute) in Nepal time
-const int readingHours[] = {6, 12, 17, 22};
-const int readingMinutes[] = {0, 0, 0, 0};
-const int NUM_READINGS = 4;
-
-// Track which readings were taken today
-bool readingsTaken[4] = {false, false, false, false};
-int currentDay = -1;  // To detect day changes
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", timeZoneOffset);
+
+// Define designated times in hours (24-hour format)
+const int designatedTimes[] = {7, 14, 21}; // 7 AM, 2 PM, 9 PM
+const int numDesignatedTimes = sizeof(designatedTimes) / sizeof(designatedTimes[0]);
 
 // WiFi provisioning event handler
 void SysProvEvent(arduino_event_t *sys_event) {
@@ -154,33 +152,6 @@ void blinkBlueLED() {
     }
 }
 
-// Function to check if it's time for scheduled reading
-int checkScheduledReadingTime() {
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) {
-        Serial.println("Failed to obtain time");
-        return -1;
-    }
-    
-    int currentHour = timeinfo.tm_hour;
-    int currentMinute = timeinfo.tm_min;
-    
-    // Check if we're within 5 minutes of any scheduled reading time
-    for (int i = 0; i < NUM_READINGS; i++) {
-        if (!readingsTaken[i]) {  // If this reading hasn't been taken yet today
-            int scheduledHour = readingHours[i];
-            int scheduledMinute = readingMinutes[i];
-            
-            // If we're at the exact scheduled time or up to 5 minutes after
-            if ((currentHour == scheduledHour && currentMinute >= scheduledMinute && currentMinute <= scheduledMinute + 5)) {
-                return i;  // Return the index of the scheduled reading
-            }
-        }
-    }
-    
-    return -1;  // No scheduled reading due
-}
-
 // Function to control the pump
 void controlPump(bool state) {
     digitalWrite(relayPin, state ? HIGH : LOW);
@@ -198,14 +169,23 @@ void controlPump(bool state) {
     Serial.println(state ? "ON" : "OFF");
 }
 
+
 // Function to take sensor readings and return as a FirebaseJson
 FirebaseJson takeSensorReadings() {
     FirebaseJson jsonData;
-    
+
     // Read DHT11 sensor
     float airHumidity = dht.readHumidity();
     float airTemperature = dht.readTemperature();
-    
+
+    // Check for NaN and set to 0.0
+    if (isnan(airHumidity)) {
+        airHumidity = 0.0;
+    }
+    if (isnan(airTemperature)) {
+        airTemperature = 0.0;
+    }
+
     // Read other sensors
     waterTempSensor.requestTemperatures();
     float waterTemperature = waterTempSensor.getTempCByIndex(0);
@@ -226,20 +206,20 @@ FirebaseJson takeSensorReadings() {
     time_t now;
     time(&now);
     unsigned long timestamp = now;
-    
+
     // Create formatted time string
     struct tm timeinfo;
     localtime_r(&now, &timeinfo);
     char timeStr[9];
     sprintf(timeStr, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-    
+
     // Create formatted date (YYYY-MM-DD)
     char dateStr[11];
-    sprintf(dateStr, "%04d-%02d-%02d", 
-            timeinfo.tm_year + 1900, 
-            timeinfo.tm_mon + 1, 
+    sprintf(dateStr, "%04d-%02d-%02d",
+            timeinfo.tm_year + 1900,
+            timeinfo.tm_mon + 1,
             timeinfo.tm_mday);
-    
+
     // Print sensor readings horizontally
     Serial.print("Air Temperature: ");
     Serial.print(airTemperature);
@@ -262,7 +242,7 @@ FirebaseJson takeSensorReadings() {
     Serial.print("TDS Value: ");
     Serial.print(tds, 2);
     Serial.println(" ppm");
-    
+
     // Set values in JSON
     jsonData.set("airTemperature", airTemperature);
     jsonData.set("airHumidity", airHumidity);
@@ -275,45 +255,32 @@ FirebaseJson takeSensorReadings() {
     jsonData.set("timestamp", timestamp);
     jsonData.set("time", timeStr);
     jsonData.set("date", dateStr);
-    
+
     return jsonData;
 }
 
-// Function to submit zero readings for missed schedule
-void submitZeroReadings(int readingIndex, const char* dateStr) {
-    String readingName;
-    switch (readingIndex) {
-        case 0: readingName = "morning"; break;
-        case 1: readingName = "noon"; break;
-        case 2: readingName = "evening"; break;
-        case 3: readingName = "night"; break;
-        default: readingName = "unknown"; break;
-    }
-    
-    FirebaseJson jsonData;
-    jsonData.set("airTemperature", 0);
-    jsonData.set("airHumidity", 0);
-    jsonData.set("waterTemperature", 0);
-    jsonData.set("ldr", 0);
-    jsonData.set("distance", 0);
-    jsonData.set("pH", 0);
-    jsonData.set("tds", 0);
-    jsonData.set("pumpStatus", false);
-    jsonData.set("timestamp", 0);
-    jsonData.set("time", String(readingHours[readingIndex]) + ":00:00");
-    jsonData.set("date", dateStr);
-    jsonData.set("missed", true);
-    
-    // Create path for this reading
-    String path = "/daily_readings/" + String(dateStr) + "/" + readingName;
-    
-    if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &jsonData)) {
-        Serial.println("Zero data set for missed " + readingName + " reading");
-    } else {
-        Serial.println("FAILED to set zero data for " + readingName);
-        Serial.println("REASON: " + fbdo.errorReason());
-    }
+// Function to generate unique ID for daily readings
+String generateUniqueId() {
+    return String(millis()) + "_" + String(random(1000));
 }
+
+
+
+String getFormattedDate() {
+    time_t now;
+    time(&now);
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    
+    char dateStr[11];
+    sprintf(dateStr, "%04d-%02d-%02d", 
+            timeinfo.tm_year + 1900, 
+            timeinfo.tm_mon + 1, 
+            timeinfo.tm_mday);
+    return String(dateStr);
+}
+
+
 
 void setup() {
     Serial.begin(115200);
@@ -372,6 +339,20 @@ long measureDistance() {
     return duration * 0.034 / 2;
 }
 
+// Function to check if current time is a designated time
+bool isDesignatedTime() {
+    time_t now;
+    time(&now);
+    struct tm *timeinfo = localtime(&now);
+    
+    for (int i = 0; i < numDesignatedTimes; i++) {
+        if (timeinfo->tm_hour == designatedTimes[i] && timeinfo->tm_min == 0 && timeinfo->tm_sec == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void loop() {
     // Check if reset button is pressed
     if (digitalRead(RESET_BUTTON_PIN) == LOW && !isResetting) {
@@ -405,100 +386,6 @@ void loop() {
     }
 
     if (Firebase.ready() && signupOK) {
-        // Get current date and time
-        struct tm timeinfo;
-        if (!getLocalTime(&timeinfo)) {
-            Serial.println("Failed to obtain time");
-            delay(1000);
-            return;
-        }
-        
-        // Create formatted date (YYYY-MM-DD)
-        char dateStr[11];
-        sprintf(dateStr, "%04d-%02d-%02d", 
-                timeinfo.tm_year + 1900, 
-                timeinfo.tm_mon + 1, 
-                timeinfo.tm_mday);
-        
-        // Check if it's a new day
-        if (timeinfo.tm_mday != currentDay) {
-            // It's a new day - update the day and reset readings taken flags
-            currentDay = timeinfo.tm_mday;
-            
-            // Check if any readings were missed yesterday
-            if (currentDay > 0) {  // Not first boot
-                // Calculate yesterday's date
-                struct tm yesterday = timeinfo;
-                yesterday.tm_mday -= 1;
-                mktime(&yesterday);  // Normalize the time
-                
-                char yesterdayStr[11];
-                sprintf(yesterdayStr, "%04d-%02d-%02d", 
-                        yesterday.tm_year + 1900, 
-                        yesterday.tm_mon + 1, 
-                        yesterday.tm_mday);
-                
-                // Check for any missed readings from yesterday and submit zeros
-                for (int i = 0; i < NUM_READINGS; i++) {
-                    if (!readingsTaken[i]) {
-                        submitZeroReadings(i, yesterdayStr);
-                    }
-                }
-            }
-            
-            // Reset tracking for the new day
-            for (int i = 0; i < NUM_READINGS; i++) {
-                readingsTaken[i] = false;
-            }
-            
-            Serial.println("New day detected: " + String(dateStr));
-        }
-        
-        // Check if it's time for any scheduled reading
-        int readingIndex = checkScheduledReadingTime();
-        if (readingIndex >= 0) {
-            // It's time for a scheduled reading
-            String readingName;
-            switch (readingIndex) {
-                case 0: readingName = "morning"; break;
-                case 1: readingName = "noon"; break;
-                case 2: readingName = "evening"; break;
-                case 3: readingName = "night"; break;
-                default: readingName = "unknown"; break;
-            }
-            
-            // Take readings
-            FirebaseJson jsonData = takeSensorReadings();
-            
-            // Create path for this reading
-            String path = "/daily_readings/" + String(dateStr) + "/" + readingName;
-            
-            // Send to Firebase
-            if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &jsonData)) {
-                Serial.println(readingName + " reading logged successfully");
-                readingsTaken[readingIndex] = true;
-            } else {
-                Serial.println("Failed to log " + readingName + " reading: " + fbdo.errorReason());
-            }
-        }
-        
-        // Check for any missed readings that are now in the past
-        int currentHour = timeinfo.tm_hour;
-        int currentMinute = timeinfo.tm_min;
-        
-        for (int i = 0; i < NUM_READINGS; i++) {
-            if (!readingsTaken[i]) {
-                // If the scheduled time is in the past by more than 5 minutes
-                if ((currentHour > readingHours[i]) || 
-                    (currentHour == readingHours[i] && currentMinute > readingMinutes[i] + 5)) {
-                    // Submit zero readings for the missed schedule
-                    submitZeroReadings(i, dateStr);
-                    readingsTaken[i] = true;
-                    Serial.println("Missed reading time detected, zero values submitted");
-                }
-            }
-        }
-        
         // Check for pump control commands from Firebase
         if (Firebase.RTDB.getBool(&fbdo, "/pumpCommand")) {
             if (fbdo.dataType() == "boolean") {
@@ -509,7 +396,7 @@ void loop() {
             }
         }
 
-        // Update current values every 10 seconds
+        // Update current values every 3 seconds
         if (millis() - sendDataPrevMillis > 3000 || sendDataPrevMillis == 0) {
             sendDataPrevMillis = millis();
             
@@ -534,6 +421,31 @@ void loop() {
                     Serial.println("REASON: " + fbdo.errorReason());
                 }
             }
+        }
+
+        // Add daily readings only during designated times
+        static bool readingSent = false;
+        if (isDesignatedTime()) {
+            if (!readingSent) {
+                // Take readings and send to Firebase
+                FirebaseJson jsonData = takeSensorReadings();
+                
+                // Generate unique ID for daily readings node
+                String uniqueId = generateUniqueId();
+                
+                // Create path for new daily reading
+                String path = "/daily_readings/" + uniqueId;
+                
+                if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &jsonData)) {
+                    Serial.println("Daily reading sent successfully");
+                    readingSent = true;
+                } else {
+                    Serial.println("Failed to send daily reading");
+                    Serial.println("REASON: " + fbdo.errorReason());
+                }
+            }
+        } else {
+            readingSent = false;
         }
     }
     

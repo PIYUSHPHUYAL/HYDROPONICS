@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { View, Image, Animated, Text, TouchableOpacity, StyleSheet, Dimensions, SafeAreaView } from 'react-native';
 import React, { useState, useEffect, useRef } from 'react';
 import { Tabs } from 'expo-router';
@@ -13,6 +12,10 @@ const _Layout = () => {
   const [currentOnboardingScreen, setCurrentOnboardingScreen] = useState(0);
 
   const splashOpacity = useRef(new Animated.Value(1)).current;
+
+  // Animation values for the third onboarding screen
+  const fadeInOpacity = useRef(new Animated.Value(0)).current;
+  const fadeInTranslateY = useRef(new Animated.Value(20)).current;
 
   // Onboarding data
   const onboardingScreens = [
@@ -30,9 +33,9 @@ const _Layout = () => {
     },
     {
       id: 3,
-      title: 'Enter Credentials',
-      subtitle: 'Enter Your Device Credentials',
-      image: require("../../assets12345/cred.png") // Update with your actual image path
+      title: "Let's Grow Together",
+      subtitle: 'Welcome to Your Garden',
+      image: require("../../assets12345/hydro.png") // Update with your actual image path
     }
   ];
 
@@ -45,6 +48,29 @@ const _Layout = () => {
 
     return () => clearTimeout(timer);
   }, []);
+
+  // Handle animation for the third onboarding screen
+  useEffect(() => {
+    if (currentOnboardingScreen === 2) {
+      // Reset animation values
+      fadeInOpacity.setValue(0);
+      fadeInTranslateY.setValue(20);
+
+      // Start fade-in animation
+      Animated.parallel([
+        Animated.timing(fadeInOpacity, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeInTranslateY, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: true,
+        })
+      ]).start();
+    }
+  }, [currentOnboardingScreen]);
 
   // Handle continue button press
   const handleContinue = () => {
@@ -72,16 +98,37 @@ const _Layout = () => {
   // Render onboarding screens
   if (showOnboarding) {
     const currentScreen = onboardingScreens[currentOnboardingScreen];
+    const isThirdScreen = currentOnboardingScreen === 2;
 
     return (
       <SafeAreaView style={styles.fullScreenContainer}>
         <View style={styles.contentContainer}>
-          <View style={styles.imageContainer}>
-            <Image source={currentScreen.image} style={styles.image} />
-          </View>
-
-          <Text style={styles.title}>{currentScreen.title}</Text>
-          <Text style={styles.subtitle}>{currentScreen.subtitle}</Text>
+          {isThirdScreen ? (
+            // Animated content for the third screen
+            <Animated.View
+              style={[
+                styles.imageContainer,
+                { opacity: fadeInOpacity, transform: [{ translateY: fadeInTranslateY }] }
+              ]}
+            >
+              <Image source={currentScreen.image} style={styles.image} />
+              <Animated.Text style={[styles.title, { opacity: fadeInOpacity, transform: [{ translateY: fadeInTranslateY }] }]}>
+                {currentScreen.title}
+              </Animated.Text>
+              <Animated.Text style={[styles.subtitle, { opacity: fadeInOpacity, transform: [{ translateY: fadeInTranslateY }] }]}>
+                {currentScreen.subtitle}
+              </Animated.Text>
+            </Animated.View>
+          ) : (
+            // Regular content for other screens
+            <>
+              <View style={styles.imageContainer}>
+                <Image source={currentScreen.image} style={styles.image} />
+              </View>
+              <Text style={styles.title}>{currentScreen.title}</Text>
+              <Text style={styles.subtitle}>{currentScreen.subtitle}</Text>
+            </>
+          )}
 
           <View style={styles.pagination}>
             {onboardingScreens.map((_, index) => (
@@ -97,9 +144,20 @@ const _Layout = () => {
         </View>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={handleContinue}>
-            <Text style={styles.buttonText}>Continue</Text>
-          </TouchableOpacity>
+          {isThirdScreen ? (
+            <Animated.View style={{ opacity: fadeInOpacity, transform: [{ translateY: fadeInTranslateY }] }}>
+              <TouchableOpacity
+                style={[styles.button, styles.getStartedButton]}
+                onPress={handleContinue}
+              >
+                <Text style={[styles.buttonText, styles.getStartedButtonText]}>Let's Get Started</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : (
+            <TouchableOpacity style={styles.button} onPress={handleContinue}>
+              <Text style={styles.buttonText}>Continue</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -219,6 +277,7 @@ const styles = StyleSheet.create({
     width: 150,
     height: 150,
     resizeMode: 'contain',
+    marginBottom: 40,
   },
   title: {
     fontSize: 24,
@@ -248,7 +307,8 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     alignItems: 'center',
-    paddingBottom: 40,
+    paddingBottom: 160,
+    marginTop: -120,
   },
   button: {
     backgroundColor: 'white',
@@ -264,6 +324,15 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '500',
     fontSize: 16,
+  },
+  getStartedButton: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+    width: 220,
+  },
+  getStartedButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
 });
 

@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, SafeAreaView, ScrollView, Switch, Alert, 
 import { useState } from "react"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
+import SystemScore from "../suggestion-section"
 
 
 const Settings = () => {
@@ -168,7 +169,7 @@ const Settings = () => {
       <ScrollView className="flex-1 px-4">
         {/* Notification Preferences */}
         <View className="py-2">
-          {renderSectionHeader("notifications-outline", "Notification Preferences", "notifications")}
+          {renderSectionHeader("notifications-outline", "Notification ", "notifications")}
           {expandedSections.notifications && (
             <View className="py-2">
               {renderSwitchItem("volume-medium-outline", "Sound", notificationSettings.sound, (value) =>
@@ -179,11 +180,6 @@ const Settings = () => {
                 setNotificationSettings({ ...notificationSettings, vibration: value }),
               )}
 
-              {renderSelectItem("Notification Schedule", notificationSettings.schedule, [
-                { label: "Always", value: "always" },
-                { label: "Day Only (8AM-10PM)", value: "day" },
-                { label: "Night Only (10PM-8AM)", value: "night" },
-              ])}
             </View>
           )}
         </View>
@@ -299,6 +295,8 @@ const Settings = () => {
         <TouchableOpacity className="my-6 p-3 bg-red-50 rounded-md" onPress={handleLogout}>
           <Text className="text-red-600 font-medium text-center">Log Out</Text>
         </TouchableOpacity>
+              {/* System Score Component - Added at the top */}
+      <SystemScore />
 
         {/* Add some bottom padding */}
         <View className="h-8" />

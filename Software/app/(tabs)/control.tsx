@@ -1,9 +1,21 @@
+"use client"
+
 import { View, Text, TouchableOpacity, SafeAreaView, Alert, ScrollView, TextInput } from "react-native"
 import { useState, useEffect } from "react"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { database, ref, onValue, set, query, limitToLast, orderByKey } from "./firebase"
-import SuggestionSection from "../suggestion-section" // Import the new component
+import { database, ref, onValue, set, push, get } from "./firebase"
+import SystemScore from "../system-score" // Import the new system score component
+
+interface SystemScoreData {
+  total: number
+  ph: number
+  tds: number
+  waterTemp: number
+  airTemp: number
+  humidity: number
+  lightIntensity: number
+}
 
 const Control = () => {
   const router = useRouter()
@@ -12,6 +24,9 @@ const Control = () => {
   const [waterLevel, setWaterLevel] = useState(0)
   const [pumpMode, setPumpMode] = useState("auto") // 'auto', 'manual'
   const [pumpDuration, setPumpDuration] = useState(15) // minutes
+  const [clickCount, setClickCount] = useState(0)
+  const [maxClicksReached, setMaxClicksReached] = useState(false)
+  const [currentSystemScore, setCurrentSystemScore] = useState<SystemScoreData | null>(null)
 
   useEffect(() => {
     // Reference to the pump status
@@ -21,7 +36,7 @@ const Control = () => {
     const readingsRef = ref(database, "readings")
 
     // Create a query to get only the latest reading
-    const latestReadingQuery = query(readingsRef, orderByKey(), limitToLast(1))
+    const latestReadingQuery = ref(database, "readings/current")
 
     // Set up the listener for pump status
     const pumpUnsubscribe = onValue(
@@ -44,14 +59,10 @@ const Control = () => {
       latestReadingQuery,
       (snapshot) => {
         if (snapshot.exists()) {
-          // Since we're using limitToLast(1), there should only be one child
-          snapshot.forEach((childSnapshot) => {
-            // Get the distance value from the child
-            const distanceValue = childSnapshot.child("distance").val()
-            if (distanceValue !== null && distanceValue !== undefined) {
-              setWaterLevel(distanceValue)
-            }
-          })
+          const distanceValue = snapshot.child("distance").val()
+          if (distanceValue !== null && distanceValue !== undefined) {
+            setWaterLevel(distanceValue)
+          }
         }
       },
       (error) => {
@@ -99,7 +110,7 @@ const Control = () => {
 
   // Determine water level status and color based on distance readings
   const getWaterLevelInfo = () => {
-    if (waterLevel > 100) {
+    if (waterLevel === 2 || waterLevel === 3 || waterLevel === 4) {
       return {
         status: "Full",
         percentage: 100,
@@ -107,7 +118,7 @@ const Control = () => {
         textColor: "text-green-500",
         icon: "water-outline",
       }
-    } else if (waterLevel === 6 || waterLevel === 3) {
+    } else if (waterLevel === 5 || waterLevel === 6) {
       return {
         status: "75% Full",
         percentage: 75,
@@ -138,16 +149,182 @@ const Control = () => {
     setPumpDuration(Math.max(1, Math.min(60, Number.parseInt(value) || 1)))
   }
 
+  // Function to get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, "0")
+    const day = String(now.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }
+
+  // Function to update the click count
+  const updateClickCount = async () => {
+    const today = getTodayDate()
+    const countRef = ref(database, `daily_readings_count/${today}`)
+
+    try {
+      const snapshot = await get(countRef)
+      let newCount = 1
+      if (snapshot.exists()) {
+        newCount = snapshot.val() + 1
+      }
+
+      await set(countRef, newCount)
+      setClickCount(newCount)
+
+      if (newCount >= 4) {
+        setMaxClicksReached(true)
+        Alert.alert("Limit Reached", "You have reached the maximum number of readings for today.")
+      }
+    } catch (error) {
+      console.error("Error updating click count:", error)
+      Alert.alert("Error", "Failed to update click count. Please try again.")
+    }
+  }
+
+  // Handle system score changes
+  const handleSystemScoreChange = (totalScore: number) => {
+    setCurrentSystemScore({
+      total: totalScore,
+      ph: 0,
+      tds: 0,
+      waterTemp: 0,
+      airTemp: 0,
+      humidity: 0,
+      lightIntensity: 0,
+    })
+  }
+
+  const transferToDailyReadings = async () => {
+    if (maxClicksReached) {
+      Alert.alert("Limit Reached", "You have already transferred the maximum number of readings for today.")
+      return
+    }
+
+    try {
+      // Reference to the readings node
+      const readingsRef = ref(database, "readings/current")
+
+      // Get the current readings
+      const readingsSnapshot = await get(readingsRef)
+      if (!readingsSnapshot.exists()) {
+        Alert.alert("Error", "No readings found.")
+        return
+      }
+
+      const readings = readingsSnapshot.val()
+
+      // Add the current date to the readings
+      readings.date = getTodayDate()
+
+      // Add the system score to the readings if available
+      if (currentSystemScore) {
+        const scoreHistoryRef = ref(database, "system_score_history")
+        const newScoreEntry = push(scoreHistoryRef)
+        await set(newScoreEntry, {
+          date: getTodayDate(),
+          timestamp: new Date().toISOString(),
+          score: currentSystemScore.total,
+        })
+      }
+
+      // Reference to the daily_readings node
+      const dailyReadingsRef = ref(database, "daily_readings")
+
+      // Generate a unique ID for the new entry
+      const newDailyReadingRef = push(dailyReadingsRef)
+
+      // Add system score to readings if available
+      if (currentSystemScore) {
+        readings.systemScore = currentSystemScore.total
+      }
+
+      // Set the readings in daily_readings
+      await set(newDailyReadingRef, readings)
+
+      // Also save the system score history separately
+      if (currentSystemScore) {
+        const scoreHistoryRef = ref(database, "system_score_history")
+        const newScoreEntry = push(scoreHistoryRef)
+        await set(newScoreEntry, {
+          date: getTodayDate(),
+          timestamp: new Date().toISOString(),
+          score: currentSystemScore.total,
+        })
+      }
+
+      Alert.alert("Success", "Your Hydroponics Readings for the day is successfully transmitted.")
+
+      // Update the click count
+      updateClickCount()
+    } catch (error) {
+      console.error("Error transferring readings:", error)
+      Alert.alert("Error", "Failed to transfer readings. Please try again.")
+    }
+  }
+
+  // Initialize click count
+  useEffect(() => {
+    const initializeClickCount = async () => {
+      const today = getTodayDate()
+      const countRef = ref(database, `daily_readings_count/${today}`)
+
+      try {
+        const snapshot = await get(countRef)
+        if (snapshot.exists()) {
+          setClickCount(snapshot.val())
+          if (snapshot.val() >= 4) {
+            setMaxClicksReached(true)
+          }
+        }
+      } catch (error) {
+        console.error("Error initializing click count:", error)
+      }
+    }
+
+    initializeClickCount()
+  }, [])
+
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <View style={{ position: 'absolute', top: 63, right: 17.5, zIndex: 10 }}>
+      <View style={{ position: "absolute", top: 63, right: 17.5, zIndex: 10 }}>
         <TouchableOpacity onPress={() => router.push("/notifications")}>
           <Ionicons name="notifications-outline" size={24} color="black" />
           <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />
         </TouchableOpacity>
       </View>
-      <Text className="text-2xl font-bold text-center mb-6 my-4">System Controls</Text>
 
+      <Text className="text-2xl font-bold text-center mb-6 my-4">Controls</Text>
+
+      {/* System Score Component */}
+      <SystemScore onScoreChange={handleSystemScoreChange} />
+
+      {/* Transfer to Daily Readings Button with Dots Indicator */}
+      <View className="mx-5 mb-4">
+        <View className="flex-row justify-between items-center mb-2">
+          <Text className="text-gray-700 font-medium">Daily Transfers</Text>
+          <View className="flex-row items-center">
+            {[...Array(4)].map((_, i) => (
+              <View
+                key={i}
+                className={`h-2.5 w-2.5 rounded-full mx-0.5 ${i < clickCount ? "bg-green-500" : "bg-gray-200"}`}
+              />
+            ))}
+          </View>
+        </View>
+
+        <TouchableOpacity
+          className={`py-3 rounded-lg items-center ${maxClicksReached ? "bg-red-500" : "bg-green-500"}`}
+          onPress={transferToDailyReadings}
+          disabled={maxClicksReached}
+        >
+          <Text className="text-sm font-medium text-white">
+            {maxClicksReached ? "Maximum Daily Transfers Reached" : "Transfer to Daily Readings"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
         {/* Water Level Indicator Card */}
         <View className="mx-5 mb-4 rounded-xl overflow-hidden bg-white shadow-md border border-gray-100">
           <View className="p-5">
@@ -239,9 +416,6 @@ const Control = () => {
             )}
           </View>
         </View>
-        <ScrollView>
-        {/* Farmer's Guide Section (replacing Parameter Thresholds) */}
-        <SuggestionSection />
       </ScrollView>
     </SafeAreaView>
   )

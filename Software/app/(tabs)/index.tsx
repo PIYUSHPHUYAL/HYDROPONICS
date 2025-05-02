@@ -7,6 +7,7 @@ import { database, ref, onValue } from "./firebase" // Import from your firebase
 import { Linking } from "react-native"
 import { IconButton } from 'react-native-paper';
 
+
 export default function Index() {
   const router = useRouter()
   const [sensorData, setSensorData] = useState({
@@ -77,7 +78,8 @@ export default function Index() {
     // Reference to the readings node
     const readingsRef = ref(database, "readings/current")
 
-    onValue(readingsRef, (snapshot) => {
+    // **Important: Capture the unsubscribe function**
+    const unsubscribe = onValue(readingsRef, (snapshot) => {
       const data = snapshot.val()
       if (data) {
         // conversion factor, EC calc, etc.
@@ -94,7 +96,7 @@ export default function Index() {
         const lastUpdated = `${today.getMonth()+1}/${today.getDate()}/${today.getFullYear()} ${h}:${m.toString().padStart(2,"0")} ${ampm}`
 
         setSensorData({
-          pH:   data.pH?.toFixed(2)           || "--",
+          pH:       data.pH?.toFixed(2)       || "--",
           nutrient: data.tds?.toFixed(0)      || "--",
           sunlight: data.ldr?.toFixed(0)      || "--",
           EC: calculatedEC,
@@ -174,7 +176,7 @@ export default function Index() {
         </ScrollView>
 
         {/* Pagination dots */}
-        <View className="flex-row justify-center">
+        <View className="flex-row justify-center"  style={{ top:5 }}>
           {tipsData.map((_, index) => (
             <View
               key={index}
@@ -184,9 +186,9 @@ export default function Index() {
         </View>
       </View>
 
-      <ScrollView className="flex-1">
+      <ScrollView className="flex-1" style={{ top:-5 }}>
         {/* Metrics Grid */}
-        <View className="mx-5 mb-5">
+        <View className="mx-5 mt-1">
           <View className="flex-row mb-5">
             {/* pH Level */}
             <View className="flex-1 mr-2 p-5 border border-gray-200 rounded-xl items-center">

@@ -6,7 +6,6 @@ import {
   SafeAreaView,
   ScrollView,
   FlatList,
-  Dimensions
 } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -38,7 +37,7 @@ const THRESHOLDS = {
     critical: { max: 30 }
   },
   airHumidity: {
-    warning: { min: 40, max: 80 }
+    warning: { min: 40 }
   },
   airTemperature: {
     warning: { min: 15 },
@@ -49,7 +48,6 @@ const THRESHOLDS = {
 export default function Notifications() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("critical");
-  const screenWidth = Dimensions.get('window').width;
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -58,7 +56,7 @@ export default function Notifications() {
     parameter: string,
     value: any,
     thresholds: any,
-    timestamp: number
+    timeString: string    // ← now a string
   ): Notification | null => {
     // Skip if value is undefined or null
     if (value === undefined || value === null) return null;
@@ -94,18 +92,15 @@ export default function Notifications() {
       return null;
     }
 
-    // Format the timestamp
-    const date = new Date(timestamp);
-    const formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const today = new Date();
+    const formatTime = (time24: string): string => {
+      const [hourStr, minuteStr] = time24.split(":");
+      let hour = parseInt(hourStr, 10);
+      const period = hour >= 12 ? "pm" : "am";
+      hour = hour % 12 || 12;           // convert 0→12, 13→1, etc.
+      return `${hour}:${minuteStr} ${period}`;
+    };
 
-    let formattedDate;
-    if (date.toDateString() === today.toDateString()) {
-      formattedDate = formattedTime;
-    } else {
-      formattedDate = "Yesterday";
-    }
-
+    const formatted = formatTime(timeString);
     // Create and return the notification
     return {
       id: `${parameter}-${Date.now()}`,
@@ -113,87 +108,85 @@ export default function Notifications() {
       message,
       parameter,
       value: numValue.toFixed(parameter === "pH" ? 2 : 0),
-      timestamp: formattedDate,
+      timestamp: formatted,   // <-- now "6:46 pm" etc.
       read: false
     };
   };
 
   useEffect(() => {
-    // Reference to the readings node
-    const readingsRef = ref(database, "readings");
+    // 1) point at the "current" child
+    const readingsRef = ref(database, "readings/current");
 
-    // Set up the listener
+    // 2) attach listener
     const unsubscribe = onValue(
       readingsRef,
       (snapshot) => {
-        if (snapshot.exists()) {
-          // Get the latest reading
-          let latestReading = null;
-          let latestTimestamp = 0;
-
-          snapshot.forEach((childSnapshot) => {
-            const key = Number.parseInt(childSnapshot.key);
-            if (key > latestTimestamp) {
-              latestTimestamp = key;
-              latestReading = childSnapshot.val();
-            }
-          });
-
-          if (latestReading) {
-            // Generate notifications based on the latest reading
-            const newNotifications: Notification[] = [];
-
-            // Check each parameter against its thresholds
-            const pHNotification = generateNotification(
-              "pH",
-              latestReading.pH,
-              THRESHOLDS.pH,
-              latestTimestamp
-            );
-            if (pHNotification) newNotifications.push(pHNotification);
-
-            const tdsNotification = generateNotification(
-              "TDS",
-              latestReading.tds,
-              THRESHOLDS.tds,
-              latestTimestamp
-            );
-            if (tdsNotification) newNotifications.push(tdsNotification);
-
-            const waterTempNotification = generateNotification(
-              "Water Temp",
-              latestReading.waterTemperature,
-              THRESHOLDS.waterTemperature,
-              latestTimestamp
-            );
-            if (waterTempNotification) newNotifications.push(waterTempNotification);
-
-            const airHumidityNotification = generateNotification(
-              "Air Humidity",
-              latestReading.airHumidity,
-              THRESHOLDS.airHumidity,
-              latestTimestamp
-            );
-            if (airHumidityNotification) newNotifications.push(airHumidityNotification);
-
-            const airTempNotification = generateNotification(
-              "Air Temp",
-              latestReading.airTemperature,
-              THRESHOLDS.airTemperature,
-              latestTimestamp
-            );
-            if (airTempNotification) newNotifications.push(airTempNotification);
-
-            // Merge with existing notifications, avoiding duplicates
-            setNotifications(prevNotifications => {
-              // Keep existing read notifications
-              const existingReadNotifications = prevNotifications.filter(n => n.read);
-
-              // Combine new notifications with existing read ones
-              return [...newNotifications, ...existingReadNotifications];
-            });
-          }
+        if (!snapshot.exists()) {
+          setLoading(false);
+          return;
         }
+
+        // 3) grab the one-and-only reading object
+        const latestReading = snapshot.val() as {
+          pH?: number;
+          tds?: number;
+          waterTemperature?: number;
+          airHumidity?: number;
+          airTemperature?: number;
+          lastUpdated?: number;
+        };
+
+        const timeString = latestReading.time;
+
+        // 4) generate notifications exactly as before
+        const newNotifications: Notification[] = [];
+
+        const pHNotification = generateNotification(
+          "pH",
+          latestReading.pH,
+          THRESHOLDS.pH,
+          timeString          // ← your real sensor time
+        );
+        if (pHNotification) newNotifications.push(pHNotification);
+
+        const tdsNotification = generateNotification(
+          "TDS",
+          latestReading.tds,
+          THRESHOLDS.tds,
+          timeString
+        );
+        if (tdsNotification) newNotifications.push(tdsNotification);
+
+        const waterTempNotification = generateNotification(
+          "Water Temp",
+          latestReading.waterTemperature,
+          THRESHOLDS.waterTemperature,
+          timeString
+        );
+        if (waterTempNotification) newNotifications.push(waterTempNotification);
+
+        const airHumidityNotification = generateNotification(
+          "Air Humidity",
+          latestReading.airHumidity,
+          THRESHOLDS.airHumidity,
+          timeString
+        );
+        if (airHumidityNotification) newNotifications.push(airHumidityNotification);
+
+        const airTempNotification = generateNotification(
+          "Air Temp",
+          latestReading.airTemperature,
+          THRESHOLDS.airTemperature,
+          timeString
+        );
+        if (airTempNotification) newNotifications.push(airTempNotification);
+
+        // 5) merge with any already-read items
+        setNotifications(prev => [
+          ...newNotifications,
+          ...prev.filter(n => n.read)
+        ]);
+
         setLoading(false);
       },
       (error) => {
@@ -202,9 +195,10 @@ export default function Notifications() {
       }
     );
 
-    // Clean up the listener
+    // cleanup
     return () => unsubscribe();
   }, []);
+
 
   const moveNotificationToHistory = (id: string) => {
     setNotifications(
