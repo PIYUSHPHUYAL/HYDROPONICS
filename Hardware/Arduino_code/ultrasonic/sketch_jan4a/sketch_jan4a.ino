@@ -10,16 +10,20 @@
 #include <DallasTemperature.h>
 #include "WiFiProv.h"
 #include "sdkconfig.h"
+#include <time.h>
+#include <cmath> // Include for isnan() function
 
 
 #define RESET_BUTTON_PIN 27
-
+#define BLUE_LED_PIN 2     // Using the built-in LED on most ESP32 boards (GPIO2)
 
 // WiFi Provisioning Configuration
 const char *pop = "abcd1234";           // Proof of possession (PIN)
 const char *service_name = "PROV_hydro"; // Device name
 const char *service_key = NULL;         // Not used for BLE provisioning
 bool reset_provisioned = false;          // Auto-delete previously provisioned data
+
+String basePath;   // will hold "/<pop>"
 
 // Firebase Configuration
 #define API_KEY "AIzaSyBkr6fF1ZmZ6DtSlKcPA3UrAYSH4Ib9pIc"
@@ -31,12 +35,12 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 // DHT11 configuration
-#define DHTPIN 4
+#define DHTPIN 19
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
 // DS18B20 configuration
-const int oneWireBus = 13;
+const int oneWireBus = 22;
 OneWire oneWire(oneWireBus);
 DallasTemperature waterTempSensor(&oneWire);
 
@@ -56,9 +60,17 @@ const int relayPin = 26;  // Connect to the IN pin of the relay
 unsigned long sendDataPrevMillis = 0;
 bool signupOK = false;
 bool wifiConnected = false;
+bool isResetting = false;
+unsigned long resetStartTime = 0;
+
+// Nepal timezone offset (UTC+5:45)
+const int timeZoneOffset = 5 * 3600 + 45 * 60;
+
 
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 19800);
+NTPClient timeClient(ntpUDP, "pool.ntp.org", timeZoneOffset);
+
+
 
 // WiFi provisioning event handler
 void SysProvEvent(arduino_event_t *sys_event) {
@@ -115,15 +127,39 @@ void initFirebase() {
     config.token_status_callback = tokenStatusCallback;
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
+
+}
+
+// Function to blink the blue LED
+void blinkBlueLED() {
+    if (isResetting) {
+        // Blink the LED (turn on/off every 250ms)
+        if ((millis() - resetStartTime) % 500 < 250) {
+            digitalWrite(BLUE_LED_PIN, HIGH);
+        } else {
+            digitalWrite(BLUE_LED_PIN, LOW);
+        }
+        
+        // Check if 3 seconds have passed
+        if (millis() - resetStartTime >= 3000) {
+            isResetting = false;
+            digitalWrite(BLUE_LED_PIN, LOW);
+            
+            // Actually perform the reset after LED blinking
+            Serial.println("Erasing WiFi credentials and restarting...");
+            WiFi.disconnect(true, true);
+            ESP.restart();
+        }
+    }
 }
 
 // Function to control the pump
 void controlPump(bool state) {
     digitalWrite(relayPin, state ? HIGH : LOW);
-    
+
     // Log pump state to Firebase
     if (Firebase.ready() && signupOK) {
-        if (Firebase.RTDB.setBool(&fbdo, "/pumpStatus", state)) {
+        if (Firebase.RTDB.setBool(&fbdo, (basePath + "/current/pumpStatus").c_str(), state)) {
             Serial.println("Pump status updated in Firebase");
         } else {
             Serial.println("Failed to update pump status: " + fbdo.errorReason());
@@ -134,6 +170,114 @@ void controlPump(bool state) {
     Serial.println(state ? "ON" : "OFF");
 }
 
+
+// Function to take sensor readings and return as a FirebaseJson
+FirebaseJson takeSensorReadings() {
+    FirebaseJson jsonData;
+
+    // Read DHT11 sensor
+    float airHumidity = dht.readHumidity();
+    float airTemperature = dht.readTemperature();
+
+    // Check for NaN and set to 0.0
+    if (isnan(airHumidity)) {
+        airHumidity = 0.0;
+    }
+    if (isnan(airTemperature)) {
+        airTemperature = 0.0;
+    }
+
+    // Read other sensors
+    waterTempSensor.requestTemperatures();
+    float waterTemperature = waterTempSensor.getTempCByIndex(0);
+    int ldrValue = analogRead(ldrPin);
+    long distance = measureDistance();
+
+    // Read pH value
+    int phSensorValue = analogRead(phSensorPin);
+    float phVoltage = phSensorValue * (3.3 / 4095.0);
+    float pH = 3.5 * phVoltage;
+
+    // Read TDS value
+    int tdsSensorValue = analogRead(tdsSensorPin);
+    float tdsVoltage = tdsSensorValue * (VREF / ADC_RESOLUTION);
+    float tds = (tdsVoltage / VREF) * 1000;
+
+    // Get timestamp
+    time_t now;
+    time(&now);
+    unsigned long timestamp = now;
+
+    // Create formatted time string
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    char timeStr[9];
+    sprintf(timeStr, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+
+    // Create formatted date (YYYY-MM-DD)
+    char dateStr[11];
+    sprintf(dateStr, "%04d-%02d-%02d",
+            timeinfo.tm_year + 1900,
+            timeinfo.tm_mon + 1,
+            timeinfo.tm_mday);
+
+    // Print sensor readings horizontally
+    Serial.print("Air Temperature: ");
+    Serial.print(airTemperature);
+    Serial.print(" °C, ");
+    Serial.print("Air Humidity: ");
+    Serial.print(airHumidity);
+    Serial.print(" %, ");
+    Serial.print("Water Temperature: ");
+    Serial.print(waterTemperature);
+    Serial.print(" °C, ");
+    Serial.print("LDR Value: ");
+    Serial.print(ldrValue);
+    Serial.print(", ");
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.print(", ");
+    Serial.print("pH Value: ");
+    Serial.print(pH);
+    Serial.print(", ");
+    Serial.print("TDS Value: ");
+    Serial.print(tds, 2);
+    Serial.println(" ppm");
+
+    // Set values in JSON
+    jsonData.set("airTemperature", airTemperature);
+    jsonData.set("airHumidity", airHumidity);
+    jsonData.set("waterTemperature", waterTemperature);
+    jsonData.set("ldr", ldrValue);
+    jsonData.set("distance", distance);
+    jsonData.set("pH", pH);
+    jsonData.set("tds", tds);
+    jsonData.set("pumpStatus", digitalRead(relayPin) == HIGH);
+    jsonData.set("timestamp", timestamp);
+    jsonData.set("time", timeStr);
+    jsonData.set("date", dateStr);
+
+    return jsonData;
+}
+
+
+
+String getFormattedDate() {
+    time_t now;
+    time(&now);
+    struct tm timeinfo;
+    localtime_r(&now, &timeinfo);
+    
+    char dateStr[11];
+    sprintf(dateStr, "%04d-%02d-%02d", 
+            timeinfo.tm_year + 1900, 
+            timeinfo.tm_mon + 1, 
+            timeinfo.tm_mday);
+    return String(dateStr);
+}
+
+
+
 void setup() {
     Serial.begin(115200);
     
@@ -142,6 +286,8 @@ void setup() {
     waterTempSensor.begin();
 
     pinMode(RESET_BUTTON_PIN, INPUT_PULLUP);
+    pinMode(BLUE_LED_PIN, OUTPUT);
+    digitalWrite(BLUE_LED_PIN, LOW);  // Ensure the LED is OFF initially
 
     pinMode(ldrPin, INPUT);
     pinMode(trigPin, OUTPUT);
@@ -170,10 +316,13 @@ void setup() {
     );
     
     WiFiProv.printQR(service_name, pop, "ble");
+    
+    // Initial NTP time sync
     timeClient.begin();
     
-    // Initialize pump status in Firebase once we're connected
     Serial.println("Initializing... Pump is OFF by default");
+  // Build the root path for this device/user
+  basePath = String("/") + pop;    // e.g. "/abcd1234"
 }
 
 long measureDistance() {
@@ -189,13 +338,18 @@ long measureDistance() {
 }
 
 void loop() {
-
-    if (digitalRead(RESET_BUTTON_PIN) == LOW) {
-    Serial.println("Reset button pressed! Erasing WiFi credentials...");
-    WiFi.disconnect(true, true);
-    ESP.restart();
+    // Check if reset button is pressed
+    if (digitalRead(RESET_BUTTON_PIN) == LOW && !isResetting) {
+        Serial.println("Reset button pressed! Blinking blue LED before reset...");
+        isResetting = true;
+        resetStartTime = millis();
     }
-
+    
+    // Handle the blue LED blinking if we're in reset mode
+    if (isResetting) {
+        blinkBlueLED();
+        return;  // Skip the rest of the loop while we're resetting
+    }
 
     // Wait for WiFi connection
     if (!wifiConnected) {
@@ -206,114 +360,54 @@ void loop() {
     // Initialize Firebase if not already done
     if (!signupOK && wifiConnected) {
         initFirebase();
+        // Set NTP server for the ESP32
+        configTime(timeZoneOffset, 0, "pool.ntp.org", "time.nist.gov");
+        
         // Initialize pump status in Firebase once we're connected
         if (signupOK) {
             controlPump(false); // Ensure pump status is synced with the default OFF state
         }
     }
 
-    // Process any serial commands for manual pump control (for testing)
-    if (Serial.available() > 0) {
-        char input = Serial.read();
-        if (input == '1') {
-            Serial.println("Manual command: Turning pump ON");
-            controlPump(true);
-        } else if (input == '0') {
-            Serial.println("Manual command: Turning pump OFF");
-            controlPump(false);
-        }
-    }
-
-    // Check for pump control commands from Firebase
     if (Firebase.ready() && signupOK) {
-        if (Firebase.RTDB.getBool(&fbdo, "/pumpCommand")) {
+        // Check for pump control commands from Firebase
+        if ( Firebase.RTDB.getBool(&fbdo, (basePath + "/current/pumpCommand").c_str()) ) {
             if (fbdo.dataType() == "boolean") {
                 bool pumpCommand = fbdo.boolData();
                 Serial.print("Received pump command from Firebase: ");
                 Serial.println(pumpCommand ? "ON" : "OFF");
                 controlPump(pumpCommand);
+            }
+        }
+
+        // Update current values every 3 seconds
+        if (millis() - sendDataPrevMillis > 3000 || sendDataPrevMillis == 0) {
+            sendDataPrevMillis = millis();
+            
+            // Take readings
+            FirebaseJson jsonData = takeSensorReadings();
+            jsonData.set("lastUpdated", millis());
+            
+            // Update the current readings node
+            String path = basePath + "/current";
+            
+            if (Firebase.RTDB.updateNode(&fbdo, path.c_str(), &jsonData)) {
+                Serial.println("Current data updated successfully");
+            } else {
+                Serial.println("FAILED to update current data");
+                Serial.println("REASON: " + fbdo.errorReason());
                 
-                // // Clear the command after execution (optional)
-                // Firebase.RTDB.setBool(&fbdo, "/pumpCommand", false);
+                // If update fails, try to set it
+                if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &jsonData)) {
+                    Serial.println("Current data set successfully");
+                } else {
+                    Serial.println("FAILED to set current data");
+                    Serial.println("REASON: " + fbdo.errorReason());
+                }
             }
         }
     }
-
-    // Regular sensor reading and data logging
-    if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 2000 || sendDataPrevMillis == 0)) {
-        sendDataPrevMillis = millis();
-        
-        // Read DHT11 sensor
-        float airHumidity = dht.readHumidity();
-        float airTemperature = dht.readTemperature();
-        
-        // if (isnan(airHumidity) || isnan(airTemperature)) {
-        //     Serial.println("Failed to read from DHT sensor!");
-        //     return;
-        // }
-
-        // Read other sensors
-        waterTempSensor.requestTemperatures();
-        float waterTemperature = waterTempSensor.getTempCByIndex(0);
-        int ldrValue = analogRead(ldrPin);
-        long distance = measureDistance();
-
-        // Read pH value
-        int phSensorValue = analogRead(phSensorPin);
-        float phVoltage = phSensorValue * (3.3 / 4095.0);
-        float pH = 3.5 * phVoltage;
-
-        // Read TDS value
-        int tdsSensorValue = analogRead(tdsSensorPin);
-        float tdsVoltage = tdsSensorValue * (VREF / ADC_RESOLUTION);
-        float tds = (tdsVoltage / VREF) * 1000;
-
-        // Get timestamp
-        timeClient.update();
-        unsigned long timestamp = timeClient.getEpochTime();
-
-        /// Print sensor readings horizontally
-        Serial.print("Air Temperature: ");
-        Serial.print(airTemperature);
-        Serial.print(" °C, ");
-        Serial.print("Air Humidity: ");
-        Serial.print(airHumidity);
-        Serial.print(" %, ");
-        Serial.print("Water Temperature: ");
-        Serial.print(waterTemperature);
-        Serial.print(" °C, ");
-        Serial.print("LDR Value: ");
-        Serial.print(ldrValue);
-        Serial.print(", ");
-        Serial.print("Distance: ");
-        Serial.print(distance);
-        Serial.print(", ");
-        Serial.print("pH Value: ");
-        Serial.print(pH);
-        Serial.print(", ");
-        Serial.print("TDS Value: ");
-        Serial.print(tds, 2);
-        Serial.println(" ppm");
-
-        // Create JSON object for Firebase
-        FirebaseJson jsonData;
-        jsonData.set("airTemperature", airTemperature);
-        jsonData.set("airHumidity", airHumidity);
-        jsonData.set("waterTemperature", waterTemperature);
-        jsonData.set("ldr", ldrValue);
-        jsonData.set("distance", distance);
-        jsonData.set("pH", pH);
-        jsonData.set("tds", tds);
-        // Also include current pump status
-        jsonData.set("pumpStatus", digitalRead(relayPin) == HIGH);
-
-        // Send to Firebase
-        String path = "/readings/" + String(timestamp);
-        if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &jsonData)) {
-            Serial.println("Data logged successfully at path: " + path);
-        } else {
-            Serial.println("FAILED");
-            Serial.println("REASON: " + fbdo.errorReason());
-        }
-    }
+    
+    // Small delay to prevent CPU hogging
+    delay(500);
 }

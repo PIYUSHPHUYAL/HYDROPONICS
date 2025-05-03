@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, get, child, set, query, limitToLast, orderByKey } from 'firebase/database';
+import { getDatabase, ref, onValue, get, child, set, query, limitToLast, orderByKey, push, update } from 'firebase/database';
 import "firebase/database";
 import { getAuth, signInAnonymously, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
@@ -32,7 +32,7 @@ signInAnonymously(auth).catch(error => {
   console.error("Authentication error:", error);
 });
 
-export { database, ref, onValue, get, child, auth, set, query, limitToLast, orderByKey };
+export { database, ref, onValue, get, child, auth, set, query, limitToLast, orderByKey, push, update, getDatabase, signInAnonymously };
 // export default FirebaseScreen;
 
 
