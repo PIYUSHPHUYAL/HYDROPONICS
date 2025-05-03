@@ -1,7 +1,6 @@
-"use client"
-
-import { View, Text, TouchableOpacity, Modal } from "react-native"
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
+import { View, Text, TouchableOpacity, Modal, Alert } from "react-native"
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { database, ref, onValue } from "./(tabs)/firebase"
 import { Ionicons } from "@expo/vector-icons"
 
@@ -32,15 +31,39 @@ const SystemScore = ({ onScoreChange }: SystemScoreProps) => {
   })
   const [loading, setLoading] = useState(true)
   const [showDetails, setShowDetails] = useState(false)
+  const [popCode, setPopCode] = useState<string | null>(null)
 
+  // Retrieve POP code from AsyncStorage
   useEffect(() => {
-    // Reference to the readings node
-    const latestReadingQuery = ref(database, "readings/current")
+    const getPop = async () => {
+      try {
+        const savedPop = await AsyncStorage.getItem("popCode")
+        if (savedPop) {
+          console.log("Using POP code:", savedPop)
+          setPopCode(savedPop)
+        } else {
+          console.error("No POP code found in AsyncStorage")
+          Alert.alert("Error", "No POP code found. Please login or configure your device.")
+          setLoading(false)
+        }
+      } catch (error) {
+        console.error("Error retrieving POP code:", error)
+        Alert.alert("Error", "Failed to retrieve POP code.")
+        setLoading(false)
+      }
+    }
+    getPop()
+  }, [])
 
-    // Set up the listener for the latest reading
-    const readingsUnsubscribe = onValue(
-      latestReadingQuery,
-      (snapshot) => {
+  // Listen for latest reading once popCode is available
+  useEffect(() => {
+    if (!popCode) return
+
+    console.log(`Subscribing to database path: ${popCode}/current`)
+    const latestReadingRef = ref(database, `${popCode}/current`)
+    const unsubscribe = onValue(
+      latestReadingRef,
+      snapshot => {
         if (snapshot.exists()) {
           const data = snapshot.val()
           setReadings(data)
@@ -48,17 +71,14 @@ const SystemScore = ({ onScoreChange }: SystemScoreProps) => {
         }
         setLoading(false)
       },
-      (error) => {
+      error => {
         console.error("Readings error:", error)
+        Alert.alert("Error", "Failed to fetch readings.")
         setLoading(false)
-      },
+      }
     )
-
-    // Clean up the listener
-    return () => {
-      readingsUnsubscribe()
-    }
-  }, [])
+    return () => unsubscribe()
+  }, [popCode])
 
   const calculateScores = (data: any) => {
     const newScores = {

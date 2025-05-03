@@ -1,7 +1,14 @@
-"use client"
-
-import { View, Text, TouchableOpacity, SafeAreaView, Alert, ScrollView, TextInput } from "react-native"
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  SafeAreaView,
+  Alert,
+  ScrollView,
+  TextInput,
+} from "react-native"
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import { database, ref, onValue, set, push, get } from "./firebase"
@@ -27,37 +34,56 @@ const Control = () => {
   const [clickCount, setClickCount] = useState(0)
   const [maxClicksReached, setMaxClicksReached] = useState(false)
   const [currentSystemScore, setCurrentSystemScore] = useState<SystemScoreData | null>(null)
+  const [popCode, setPopCode] = useState<string | null>(null)
 
+  // Retrieve POP code from AsyncStorage
   useEffect(() => {
-    // Reference to the pump status
-    const pumpStatusRef = ref(database, "pumpStatus")
-
-    // Reference to the readings node
-    const readingsRef = ref(database, "readings")
-
-    // Create a query to get only the latest reading
-    const latestReadingQuery = ref(database, "readings/current")
-
-    // Set up the listener for pump status
-    const pumpUnsubscribe = onValue(
-      pumpStatusRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setPumpStatus(snapshot.val())
+    const getPop = async () => {
+      try {
+        const savedPop = await AsyncStorage.getItem("popCode")
+        if (savedPop) {
+          console.log("Using POP code from storage:", savedPop)
+          setPopCode(savedPop)
         } else {
-          // If no status exists yet, assume it's off
-          setPumpStatus(false)
+          console.error("No POP code found in AsyncStorage")
+          Alert.alert("Error", "No POP code found. Please login or configure your device.")
         }
-      },
-      (error) => {
-        console.error("Pump status error:", error)
-      },
-    )
+      } catch (error) {
+        console.error("Error retrieving POP code:", error)
+        Alert.alert("Error", "Failed to retrieve POP code.")
+      }
+    }
+    getPop()
+  }, [])
 
-    // Set up the listener for the latest reading
-    const readingsUnsubscribe = onValue(
-      latestReadingQuery,
-      (snapshot) => {
+  // Listen for pump status updates
+  useEffect(() => {
+    if (!popCode) return;        // wait for popCode to be set
+    const path = `${popCode}/current/pumpStatus`;
+    console.log("Subscribing to:", path);
+    const pumpStatusRef = ref(database, path);
+    const unsubscribe = onValue(
+      pumpStatusRef,
+      snapshot => {
+        const val = snapshot.exists() ? snapshot.val() : false;
+        console.log("pumpStatus changed:", val);
+        setPumpStatus(val);
+      },
+      error => console.error("Pump status error:", error)
+    );
+    return () => unsubscribe();
+  }, [popCode]);  // ← re‑run when popCode changes
+
+
+  // Listen for sensor readings once popCode is available
+  useEffect(() => {
+    if (!popCode) return
+
+    console.log(`Subscribing to database path: ${popCode}/current`)
+    const latestReadingRef = ref(database, `${popCode}/current`)
+    const unsubscribe = onValue(
+      latestReadingRef,
+      snapshot => {
         if (snapshot.exists()) {
           const distanceValue = snapshot.child("distance").val()
           if (distanceValue !== null && distanceValue !== undefined) {
@@ -65,23 +91,18 @@ const Control = () => {
           }
         }
       },
-      (error) => {
-        console.error("Readings error:", error)
-      },
+      error => console.error("Readings error:", error)
     )
-
-    // Clean up the listeners
-    return () => {
-      pumpUnsubscribe()
-      readingsUnsubscribe()
-    }
-  }, [])
+    return () => unsubscribe()
+  }, [popCode])
 
   const togglePump = async () => {
+    if (!popCode) return
     try {
       setPumpLoading(true)
-      await set(ref(database, "pumpCommand"), !pumpStatus)
-      Alert.alert("Pump Control", `Turning pump ${!pumpStatus ? "ON" : "OFF"}...`, [{ text: "OK" }])
+      // write pumpCommand under pop/current
+      await set(ref(database, `${popCode}/current/pumpCommand`), !pumpStatus)
+      Alert.alert("Pump Control", `Turning pump ${!pumpStatus ? "ON" : "OFF"}...`)
     } catch (error) {
       console.error("Error toggling pump:", error)
       Alert.alert("Error", "Failed to control the pump. Please try again.")
@@ -91,11 +112,12 @@ const Control = () => {
   }
 
   const runPump = async () => {
+    if (!popCode) return
     try {
       setPumpLoading(true)
-      await set(ref(database, "pumpCommand"), true)
-      await set(ref(database, "pumpDuration"), pumpDuration)
-      Alert.alert("Pump Control", `Running pump for ${pumpDuration} minutes...`, [{ text: "OK" }])
+      await set(ref(database, `${popCode}/current/pumpCommand`), true)
+      await set(ref(database, `${popCode}/current/pumpDuration`), pumpDuration)
+      Alert.alert("Pump Control", `Running pump for ${pumpDuration} minutes...`)
     } catch (error) {
       console.error("Error running pump:", error)
       Alert.alert("Error", "Failed to run the pump. Please try again.")
@@ -203,10 +225,7 @@ const Control = () => {
     }
 
     try {
-      // Reference to the readings node
-      const readingsRef = ref(database, "readings/current")
-
-      // Get the current readings
+      const readingsRef = ref(database, `${popCode}/current`)
       const readingsSnapshot = await get(readingsRef)
       if (!readingsSnapshot.exists()) {
         Alert.alert("Error", "No readings found.")
@@ -218,16 +237,6 @@ const Control = () => {
       // Add the current date to the readings
       readings.date = getTodayDate()
 
-      // Add the system score to the readings if available
-      if (currentSystemScore) {
-        const scoreHistoryRef = ref(database, "system_score_history")
-        const newScoreEntry = push(scoreHistoryRef)
-        await set(newScoreEntry, {
-          date: getTodayDate(),
-          timestamp: new Date().toISOString(),
-          score: currentSystemScore.total,
-        })
-      }
 
       // Reference to the daily_readings node
       const dailyReadingsRef = ref(database, "daily_readings")
@@ -242,17 +251,6 @@ const Control = () => {
 
       // Set the readings in daily_readings
       await set(newDailyReadingRef, readings)
-
-      // Also save the system score history separately
-      if (currentSystemScore) {
-        const scoreHistoryRef = ref(database, "system_score_history")
-        const newScoreEntry = push(scoreHistoryRef)
-        await set(newScoreEntry, {
-          date: getTodayDate(),
-          timestamp: new Date().toISOString(),
-          score: currentSystemScore.total,
-        })
-      }
 
       Alert.alert("Success", "Your Hydroponics Readings for the day is successfully transmitted.")
 

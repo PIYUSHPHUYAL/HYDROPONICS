@@ -6,7 +6,7 @@ const SuggestionSection = () => {
   const [activeTab, setActiveTab] = useState("ph") // 'ph', 'tds', 'maintenance'
 
   return (
-    <View className="mx-5 mb-4 rounded-xl overflow-hidden bg-white shadow-md border border-gray-100">
+    <View className=" mb-4 rounded-xl overflow-hidden bg-white shadow-md border border-gray-100">
       <View className="p-5">
         <View className="flex-row items-center mb-4">
           <Ionicons name="bulb" size={20} color="#3b82f6" />

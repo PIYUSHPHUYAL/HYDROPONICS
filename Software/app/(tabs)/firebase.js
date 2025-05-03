@@ -32,7 +32,7 @@ signInAnonymously(auth).catch(error => {
   console.error("Authentication error:", error);
 });
 
-export { database, ref, onValue, get, child, auth, set, query, limitToLast, orderByKey, push, update };
+export { database, ref, onValue, get, child, auth, set, query, limitToLast, orderByKey, push, update, getDatabase, signInAnonymously };
 // export default FirebaseScreen;
 
 

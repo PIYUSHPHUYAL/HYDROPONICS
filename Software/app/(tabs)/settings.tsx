@@ -2,8 +2,8 @@ import { View, Text, TouchableOpacity, SafeAreaView, ScrollView, Switch, Alert, 
 import { useState } from "react"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import SystemScore from "../suggestion-section"
-
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import * as Updates from 'expo-updates'
 
 const Settings = () => {
   const router = useRouter()
@@ -50,6 +50,7 @@ const Settings = () => {
     })
   }
 
+  // Updated logout function that reloads the app
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
       {
@@ -58,49 +59,55 @@ const Settings = () => {
       },
       {
         text: "Log Out",
-        onPress: () => console.log("User logged out"),
+        onPress: async () => {
+          try {
+            // Clear authentication state
+            await AsyncStorage.removeItem("isAuthenticated")
+
+            // Reset to show splash and onboarding
+            await AsyncStorage.setItem("showOnboarding", "true")
+
+            // Reload the app instead of navigating
+            await Updates.reloadAsync()
+          } catch (error) {
+            console.error("Logout error:", error)
+            Alert.alert("Error", "Failed to log out. Please try again.")
+          }
+        },
       },
     ])
   }
 
   // Function to show contact email alert
   const showContactAlert = () => {
-    Alert.alert(
-      "Contact Information",
-      "Kindly put your concern to mail address piyushphuyal77@gmail.com",
-      [
-        { text: "OK", onPress: () => console.log("OK Pressed") }
-      ]
-    )
+    Alert.alert("Contact Information", "Kindly put your concern to mail address piyushphuyal77@gmail.com", [
+      { text: "OK", onPress: () => console.log("OK Pressed") },
+    ])
   }
 
   // Function to show contact email alert
   const showComingSoonAlert = () => {
-    Alert.alert(
-      "Coming Soon",
-      "This feature is coming soon! Stay tuned for updates.",
-      [
-        { text: "OK", onPress: () => console.log("OK Pressed") }
-      ]
-    )
+    Alert.alert("Coming Soon", "This feature is coming soon! Stay tuned for updates.", [
+      { text: "OK", onPress: () => console.log("OK Pressed") },
+    ])
   }
 
   // Function to open YouTube tutorial
   const openTutorial = async () => {
     // YouTube URL for a hydroponics tutorial
-    const youtubeUrl = "https://youtu.be/eEw9iv2K3Pc?si=4PadWVq8-Hh_Ttaa";
+    const youtubeUrl = "https://youtu.be/eEw9iv2K3Pc?si=4PadWVq8-Hh_Ttaa"
 
     // Check if the URL can be opened
-    const canOpen = await Linking.canOpenURL(youtubeUrl);
+    const canOpen = await Linking.canOpenURL(youtubeUrl)
 
     if (canOpen) {
-      await Linking.openURL(youtubeUrl);
+      await Linking.openURL(youtubeUrl)
     } else {
       Alert.alert(
         "Cannot Open Link",
         "Unable to open YouTube. Please make sure you have YouTube installed or a web browser that can access YouTube.",
-        [{ text: "OK" }]
-      );
+        [{ text: "OK" }],
+      )
     }
   }
 
@@ -157,14 +164,14 @@ const Settings = () => {
   )
 
   return (
-        <SafeAreaView className="flex-1 bg-white">
-          <View style={{ position: 'absolute', top: 63, right: 17.5, zIndex: 10 }}>
-            <TouchableOpacity onPress={() => router.push("/notifications")}>
-              <Ionicons name="notifications-outline" size={24} color="black" />
-              <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />
-            </TouchableOpacity>
-          </View>
-          <Text className="text-2xl font-bold text-center mb-6 my-4">Settings</Text>
+    <SafeAreaView className="flex-1 bg-white">
+      <View style={{ position: "absolute", top: 63, right: 17.5, zIndex: 10 }}>
+        <TouchableOpacity onPress={() => router.push("/notifications")}>
+          <Ionicons name="notifications-outline" size={24} color="black" />
+          <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />
+        </TouchableOpacity>
+      </View>
+      <Text className="text-2xl font-bold text-center mb-6 my-4">Settings</Text>
 
       <ScrollView className="flex-1 px-4">
         {/* Notification Preferences */}
@@ -179,7 +186,6 @@ const Settings = () => {
               {renderSwitchItem("notifications-outline", "Vibration", notificationSettings.vibration, (value) =>
                 setNotificationSettings({ ...notificationSettings, vibration: value }),
               )}
-
             </View>
           )}
         </View>
@@ -224,10 +230,7 @@ const Settings = () => {
           {renderSectionHeader("shield-outline", "Account & Security", "account")}
           {expandedSections.account && (
             <View className="py-2 space-y-4">
-              <TouchableOpacity
-                className="flex-row items-center p-3 bg-blue-50 rounded-md"
-                onPress={showContactAlert}
-              >
+              <TouchableOpacity className="flex-row items-center p-3 bg-blue-50 rounded-md" onPress={showContactAlert}>
                 <Ionicons name="wifi-outline" size={18} color="#3b82f6" style={{ marginRight: 8 }} />
                 <Text className="text-blue-700 font-medium">Request POP Change</Text>
               </TouchableOpacity>
@@ -295,9 +298,6 @@ const Settings = () => {
         <TouchableOpacity className="my-6 p-3 bg-red-50 rounded-md" onPress={handleLogout}>
           <Text className="text-red-600 font-medium text-center">Log Out</Text>
         </TouchableOpacity>
-              {/* System Score Component - Added at the top */}
-      <SystemScore />
-
         {/* Add some bottom padding */}
         <View className="h-8" />
       </ScrollView>

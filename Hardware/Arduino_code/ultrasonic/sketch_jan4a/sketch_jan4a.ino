@@ -23,6 +23,8 @@ const char *service_name = "PROV_hydro"; // Device name
 const char *service_key = NULL;         // Not used for BLE provisioning
 bool reset_provisioned = false;          // Auto-delete previously provisioned data
 
+String basePath;   // will hold "/<pop>"
+
 // Firebase Configuration
 #define API_KEY "AIzaSyBkr6fF1ZmZ6DtSlKcPA3UrAYSH4Ib9pIc"
 #define DATABASE_URL "https://hydroponics-a6609-default-rtdb.firebaseio.com/"
@@ -68,9 +70,7 @@ const int timeZoneOffset = 5 * 3600 + 45 * 60;
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", timeZoneOffset);
 
-// Define designated times in hours (24-hour format)
-const int designatedTimes[] = {7, 14, 21}; // 7 AM, 2 PM, 9 PM
-const int numDesignatedTimes = sizeof(designatedTimes) / sizeof(designatedTimes[0]);
+
 
 // WiFi provisioning event handler
 void SysProvEvent(arduino_event_t *sys_event) {
@@ -127,6 +127,7 @@ void initFirebase() {
     config.token_status_callback = tokenStatusCallback;
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
+
 }
 
 // Function to blink the blue LED
@@ -155,10 +156,10 @@ void blinkBlueLED() {
 // Function to control the pump
 void controlPump(bool state) {
     digitalWrite(relayPin, state ? HIGH : LOW);
-    
+
     // Log pump state to Firebase
     if (Firebase.ready() && signupOK) {
-        if (Firebase.RTDB.setBool(&fbdo, "/pumpStatus", state)) {
+        if (Firebase.RTDB.setBool(&fbdo, (basePath + "/current/pumpStatus").c_str(), state)) {
             Serial.println("Pump status updated in Firebase");
         } else {
             Serial.println("Failed to update pump status: " + fbdo.errorReason());
@@ -259,11 +260,6 @@ FirebaseJson takeSensorReadings() {
     return jsonData;
 }
 
-// Function to generate unique ID for daily readings
-String generateUniqueId() {
-    return String(millis()) + "_" + String(random(1000));
-}
-
 
 
 String getFormattedDate() {
@@ -325,6 +321,8 @@ void setup() {
     timeClient.begin();
     
     Serial.println("Initializing... Pump is OFF by default");
+  // Build the root path for this device/user
+  basePath = String("/") + pop;    // e.g. "/abcd1234"
 }
 
 long measureDistance() {
@@ -337,20 +335,6 @@ long measureDistance() {
     
     long duration = pulseIn(echoPin, HIGH);
     return duration * 0.034 / 2;
-}
-
-// Function to check if current time is a designated time
-bool isDesignatedTime() {
-    time_t now;
-    time(&now);
-    struct tm *timeinfo = localtime(&now);
-    
-    for (int i = 0; i < numDesignatedTimes; i++) {
-        if (timeinfo->tm_hour == designatedTimes[i] && timeinfo->tm_min == 0 && timeinfo->tm_sec == 0) {
-            return true;
-        }
-    }
-    return false;
 }
 
 void loop() {
@@ -387,7 +371,7 @@ void loop() {
 
     if (Firebase.ready() && signupOK) {
         // Check for pump control commands from Firebase
-        if (Firebase.RTDB.getBool(&fbdo, "/pumpCommand")) {
+        if ( Firebase.RTDB.getBool(&fbdo, (basePath + "/current/pumpCommand").c_str()) ) {
             if (fbdo.dataType() == "boolean") {
                 bool pumpCommand = fbdo.boolData();
                 Serial.print("Received pump command from Firebase: ");
@@ -405,7 +389,7 @@ void loop() {
             jsonData.set("lastUpdated", millis());
             
             // Update the current readings node
-            String path = "/readings/current";
+            String path = basePath + "/current";
             
             if (Firebase.RTDB.updateNode(&fbdo, path.c_str(), &jsonData)) {
                 Serial.println("Current data updated successfully");
@@ -421,31 +405,6 @@ void loop() {
                     Serial.println("REASON: " + fbdo.errorReason());
                 }
             }
-        }
-
-        // Add daily readings only during designated times
-        static bool readingSent = false;
-        if (isDesignatedTime()) {
-            if (!readingSent) {
-                // Take readings and send to Firebase
-                FirebaseJson jsonData = takeSensorReadings();
-                
-                // Generate unique ID for daily readings node
-                String uniqueId = generateUniqueId();
-                
-                // Create path for new daily reading
-                String path = "/daily_readings/" + uniqueId;
-                
-                if (Firebase.RTDB.setJSON(&fbdo, path.c_str(), &jsonData)) {
-                    Serial.println("Daily reading sent successfully");
-                    readingSent = true;
-                } else {
-                    Serial.println("Failed to send daily reading");
-                    Serial.println("REASON: " + fbdo.errorReason());
-                }
-            }
-        } else {
-            readingSent = false;
         }
     }
     

@@ -5,11 +5,12 @@ import { useRouter } from "expo-router"
 import { useState, useEffect, useRef } from "react"
 import { database, ref, onValue } from "./firebase" // Import from your firebase.js file
 import { Linking } from "react-native"
-import { IconButton } from 'react-native-paper';
-
+import { IconButton } from 'react-native-paper'
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
 export default function Index() {
   const router = useRouter()
+  const [popCode, setPopCode] = useState(null)
   const [sensorData, setSensorData] = useState({
     pH: "--",
     nutrient: "--",
@@ -51,6 +52,26 @@ export default function Index() {
     },
   ]
 
+  // Get the POP code from AsyncStorage
+  useEffect(() => {
+    const getPop = async () => {
+      try {
+        const savedPop = await AsyncStorage.getItem("popCode")
+        if (savedPop) {
+          console.log("Using POP code from storage:", savedPop)
+          setPopCode(savedPop)
+        } else {
+          console.error("No POP code found in AsyncStorage")
+          // You might want to handle this error case - redirect to auth screen
+        }
+      } catch (error) {
+        console.error("Error retrieving POP code:", error)
+      }
+    }
+
+    getPop()
+  }, [])
+
   // Auto-scroll functionality
   useEffect(() => {
     const timer = setInterval(() => {
@@ -74,9 +95,17 @@ export default function Index() {
     setCurrentTipIndex(newIndex)
   }
 
+  // Fetch sensor data when popCode is available
   useEffect(() => {
-    // Reference to the readings node
-    const readingsRef = ref(database, "readings/current")
+    if (!popCode) {
+      // If popCode is not yet available, don't try to fetch data
+      return
+    }
+
+    console.log(`Subscribing to database path: ${popCode}/current`)
+
+    // Reference to the specific node using the POP code
+    const readingsRef = ref(database, `${popCode}/current`)
 
     // **Important: Capture the unsubscribe function**
     const unsubscribe = onValue(readingsRef, (snapshot) => {
@@ -108,17 +137,35 @@ export default function Index() {
       }
       setLoading(false)
     }, (error) => {
-      console.error("RTDB error:", error)
+      console.error(`RTDB error for path ${popCode}/current:`, error)
       setLoading(false)
     })
 
     // Clean up the listener
     return () => unsubscribe()
-  }, [])
+  }, [popCode]) // Only run when popCode changes
 
   const goToNotifications = () => {
     router.push("/notifications")
   }
+
+  // Retrieve username from AsyncStorage or use a default
+  const [username, setUsername] = useState("User")
+
+  useEffect(() => {
+    const getUsername = async () => {
+      try {
+        const savedUsername = await AsyncStorage.getItem("username")
+        if (savedUsername) {
+          setUsername(savedUsername)
+        }
+      } catch (error) {
+        console.error("Error retrieving username:", error)
+      }
+    }
+
+    getUsername()
+  }, [])
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -128,7 +175,7 @@ export default function Index() {
       <View className="flex-row justify-between items-center px-5 pt-4 pb-2">
         <View style={{ transform: [{ translateX: 110 }] }} className="flex-row items-center">
           <Image source={require("../../assets12345/logo.png")} className="w-8 h-8 mr-3 relative -top-[3px] -left-[-6px]" />
-          <Text className="text-lg font-semibold text-green-500">Hey Piyush!</Text>
+          <Text className="text-lg font-semibold text-green-500">Hey {username}!</Text>
         </View>
         <TouchableOpacity onPress={goToNotifications}>
           <Ionicons name="notifications-outline" size={24} color="black" />
@@ -140,7 +187,11 @@ export default function Index() {
       <Text className="text-center text-blue-900 font-medium px-5 mb-4">Monitor Water, Optimize Your Grow</Text>
 
       {/* Status indicator */}
-      {loading ? <Text className="text-center text-gray-500 mb-4">Loading sensor data...</Text> : null}
+      {loading ? (
+        <Text className="text-center text-gray-500 mb-4">Loading sensor data...</Text>
+      ) : !popCode ? (
+        <Text className="text-center text-red-500 mb-4">No device connected. Please authenticate.</Text>
+      ) : null}
 
       {/* Tips Carousel */}
       <View className="mb-5">
@@ -176,7 +227,7 @@ export default function Index() {
         </ScrollView>
 
         {/* Pagination dots */}
-        <View className="flex-row justify-center"  style={{ top:5 }}>
+        <View className="flex-row justify-center" style={{ top:5 }}>
           {tipsData.map((_, index) => (
             <View
               key={index}
@@ -263,12 +314,19 @@ export default function Index() {
             </Text>
           </View>
 
-          {/* Last updated line */}
-          {sensorData.lastUpdated !== "--" && (
-            <Text className="text-gray-400 text-xs mt-1" style={{ textAlign: "center" }}>
-              Last updated: {sensorData.lastUpdated}
-            </Text>
-          )}
+          {/* Last updated line and device ID */}
+          <View className="mt-2">
+            {sensorData.lastUpdated !== "--" && (
+              <Text className="text-gray-400 text-xs" style={{ textAlign: "center" }}>
+                Last updated: {sensorData.lastUpdated}
+              </Text>
+            )}
+            {popCode && (
+              <Text className="text-gray-400 text-xs mt-1" style={{ textAlign: "center" }}>
+                Device ID: {popCode}
+              </Text>
+            )}
+          </View>
         </View>
 
         {/* Add some bottom padding to account for the tab bar */}
