@@ -1,5 +1,3 @@
-"use client"
-
 import { View, Text, TouchableOpacity, SafeAreaView, Dimensions, ScrollView, ActivityIndicator } from "react-native"
 import { useState, useEffect, useMemo } from "react"
 import { Ionicons } from "@expo/vector-icons"
@@ -339,7 +337,7 @@ const Visualization = () => {
   }
 
   const renderReadingCard = (title: string, value: number, unit: string, optimalRange: string, icon: string) => (
-    <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100">
+    <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100 ">
       <View className="flex-row justify-between items-center mb-2">
         <Text className="text-lg font-semibold">{title}</Text>
         <Ionicons name={icon} size={24} color="#0088ff" />
@@ -526,9 +524,10 @@ const Visualization = () => {
           <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />
         </TouchableOpacity>
       </View>
-      <Text className="text-2xl font-bold text-center mb-6 my-4">Visualizations</Text>
+      <Text className="text-2xl font-bold text-center mb-3 my-4">Visualizations</Text>
 
-      <ScrollView className="flex-1 px-4 pt-4">
+ {/* Used padding here so that user can scroll to the bottom */}
+      <ScrollView className="flex-1 px-4 pt-3" contentContainerStyle={{ paddingBottom: 100 }} >
         {loading ? (
           <View className="flex-1 justify-center items-center mt-10">
             <ActivityIndicator size="large" color="#0088ff" />
@@ -737,8 +736,7 @@ const Visualization = () => {
                   </View>
                 </View>
 
-                {renderReadingCard("pH Level", selectedDayData.avgPH, "", "5.5-6.5", "water-outline")}
-                {renderReadingCard("TDS", selectedDayData.avgTDS, "ppm", "800-1500 ppm", "flask-outline")}
+
                 {renderReadingCard(
                   "System Score",
                   selectedDayData.avgSystemScore,
@@ -746,6 +744,8 @@ const Visualization = () => {
                   "Higher is better",
                   "stats-chart-outline",
                 )}
+                {renderReadingCard("pH Level", selectedDayData.avgPH, "", "5.5-6.5", "water-outline")}
+                {renderReadingCard("TDS", selectedDayData.avgTDS, "ppm", "800-1500 ppm", "flask-outline")}
                 {renderReadingCard(
                   "Air Temperature",
                   selectedDayData.avgAirTemp,
