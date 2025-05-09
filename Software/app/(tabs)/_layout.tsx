@@ -17,7 +17,6 @@ import { database, ref, get, auth, signInAnonymously } from "./firebase"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { LinearGradient } from 'expo-linear-gradient';
 import { ActivityIndicator } from 'react-native';
-import { FadeInDown, FadeInUp } from 'react-native-reanimated';
 
 const { width, height } = Dimensions.get("window")
 
@@ -44,19 +43,19 @@ const _Layout = () => {
       id: 1,
       title: "Power Device",
       subtitle: "Connect The Device With Power",
-      image: require("../../assets12345/power.png"), // Update with your actual image path
+      image: require("../../assets12345/power.png"),
     },
     {
       id: 2,
       title: "Wi-Fi Provisioning",
       subtitle: "Configure WiFi Credentials",
-      image: require("../../assets12345/wifi.png"), // Update with your actual image path
+      image: require("../../assets12345/wifi.png"),
     },
     {
       id: 3,
       title: "Let's Grow Together",
       subtitle: "Welcome to Your Garden",
-      image: require("../../assets12345/hydro.png"), // Update with your actual image path
+      image: require("../../assets12345/hydro.png"),
     },
   ]
 
@@ -155,7 +154,7 @@ const _Layout = () => {
         await signInAnonymously(auth)
       }
 
-      // Get a reference to the root of your database
+      // Get a reference to the root of  database
       const dbRef = ref(database)
 
       // Fetch the data once
@@ -355,17 +354,17 @@ const _Layout = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-  style={styles.authHelpButton}
-  onPress={() => {
-    Alert.alert(
-      "",
-      "Please contact piyushphuyal77@gmail.com for your concerns regarding POP.",
-      [{ text: "OK", style: "default" }]
-    );
-  }}
->
-  <Text style={styles.authHelpButtonText}>Need Help?</Text>
-</TouchableOpacity>
+            style={styles.authHelpButton}
+            onPress={() => {
+              Alert.alert(
+                "",
+                "Please contact piyushphuyal77@gmail.com for your concerns regarding POP.",
+                [{ text: "OK", style: "default" }]
+              );
+            }}
+          >
+            <Text style={styles.authHelpButtonText}>Need Help?</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     )
