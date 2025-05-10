@@ -43,6 +43,55 @@ interface MarkedDates {
   }
 }
 
+// Helper Function to compute linear regression (slope, intercept, R-squared)
+const computeTrend = (values: number[]) => {
+  const n = values.length
+  if (n < 2) return { slope: 0, intercept: 0, rSquared: 0 }
+
+  // x = indices [0..n-1]
+  const xMean = (n - 1) / 2
+  const yMean = values.reduce((sum, v) => sum + v, 0) / n
+
+  let num = 0
+  let den = 0
+  for (let i = 0; i < n; i++) {
+    const dx = i - xMean
+    const dy = values[i] - yMean
+    num += dx * dy
+    den += dx * dx
+  }
+  const slope = den === 0 ? 0 : num / den
+  const intercept = yMean - slope * xMean
+
+  // Compute R-squared
+  let ssTot = 0
+  let ssRes = 0
+  for (let i = 0; i < n; i++) {
+    const yPred = slope * i + intercept
+    ssRes += Math.pow(values[i] - yPred, 2)
+    ssTot += Math.pow(values[i] - yMean, 2)
+  }
+  const rSquared = ssTot === 0 ? 0 : 1 - ssRes / ssTot
+
+  return { slope, intercept, rSquared }
+}
+
+// Helper Functinos to compute Pearson correlation coefficient
+const computePearson = (data: { x: number; y: number }[]) => {
+  const n = data.length
+  const meanX = data.reduce((sum, p) => sum + p.x, 0) / n
+  const meanY = data.reduce((sum, p) => sum + p.y, 0) / n
+  let num = 0, denX = 0, denY = 0
+  data.forEach(({ x, y }) => {
+    const dx = x - meanX, dy = y - meanY
+    num += dx * dy
+    denX += dx * dx
+    denY += dy * dy
+  })
+  return denX && denY ? num / Math.sqrt(denX * denY) : 0
+}
+
+
 const Visualization = () => {
   const router = useRouter()
   const [dailyAverages, setDailyAverages] = useState<DayAverageData[]>([])
@@ -190,153 +239,79 @@ const Visualization = () => {
     return dailyAverages.find((day) => day.date === selectedDate)
   }, [dailyAverages, selectedDate])
 
-  // Prepare TDS chart data
+  // Prepare TDS chart data with enhanced regression-based trend
   const tdsChartData = useMemo(() => {
-    if (dailyAverages.length === 0) return null
-
-    // Create a copy of the array sorted by date (oldest to newest)
-    const sortedData = [...dailyAverages].sort((a, b) => {
-      const dateA = new Date(a.date)
-      const dateB = new Date(b.date)
-      return dateA.getTime() - dateB.getTime()
-    })
-
-    // Filter data based on selected timeframe
-    let filteredData = sortedData
+    if (!dailyAverages.length) return null
     const today = new Date()
     const daysToShow = chartTimeframe === "7days" ? 7 : chartTimeframe === "14days" ? 14 : 30
-    const cutoffDate = new Date(today)
-    cutoffDate.setDate(today.getDate() - daysToShow)
+    const cutoff = new Date(today)
+    cutoff.setDate(today.getDate() - daysToShow)
 
-    filteredData = sortedData.filter((item) => {
-      const itemDate = new Date(item.date)
-      return itemDate >= cutoffDate
-    })
-
-    // For 7-day view, limit to 7 data points if needed
-    let dataToUse = filteredData
-    if (chartTimeframe === "7days" && filteredData.length > 7) {
-      const step = Math.ceil(filteredData.length / 7)
-      dataToUse = filteredData.filter((_, index) => index % step === 0)
-
-      // Always include the most recent data point
-      if (dataToUse[dataToUse.length - 1] !== filteredData[filteredData.length - 1]) {
-        dataToUse.push(filteredData[filteredData.length - 1])
+    let filtered = dailyAverages.filter(d => new Date(d.date) >= cutoff)
+    if (chartTimeframe === "7days" && filtered.length > 7) {
+      const step = Math.ceil(filtered.length / 7)
+      filtered = filtered.filter((_, i) => i % step === 0)
+      if (filtered[filtered.length - 1] !== dailyAverages[dailyAverages.length - 1]) {
+        filtered.push(dailyAverages[dailyAverages.length - 1])
       }
     }
 
-    // Format dates for display based on timeframe
-    const labels = dataToUse.map((day, index) => {
-      const date = new Date(day.date)
-
-      // For 7-day view, show specific dates
-      if (chartTimeframe === "7days") {
-        return date.toLocaleDateString(undefined, { day: "numeric", month: "short" })
-      }
-      // For 14-day and 30-day views, only show labels for first, middle and last points
-      else {
-        // Only show label for first, middle and last points
-        if (index === 0 || index === dataToUse.length - 1 || index === Math.floor(dataToUse.length / 2)) {
-          return date.toLocaleDateString(undefined, { day: "numeric", month: "short" })
-        }
-        return ""
-      }
+    const labels = filtered.map((d, i) => {
+      const dt = new Date(d.date)
+      if (chartTimeframe === "7days") return dt.toLocaleDateString(undefined, { day: "numeric", month: "short" })
+      if (i === 0 || i === filtered.length - 1 || i === Math.floor(filtered.length / 2))
+        return dt.toLocaleDateString(undefined, { day: "numeric", month: "short" })
+      return ""
     })
 
-    const tdsValues = dataToUse.map((day) => day.avgTDS)
+    const values = filtered.map(d => d.avgTDS)
+    const { slope, intercept, rSquared } = computeTrend(values)
 
-    // Calculate trend
-    let trend = "stable"
-    if (tdsValues.length >= 2) {
-      const firstValue = tdsValues[0]
-      const lastValue = tdsValues[tdsValues.length - 1]
-      const percentChange = ((lastValue - firstValue) / firstValue) * 100
+    // Trend direction based on slope
+    const range = Math.max(...values) - Math.min(...values) || 1
+    const slopeThreshold = range * 0.01
+    let trend: 'rising' | 'falling' | 'stable' = 'stable'
+    if (slope > slopeThreshold) trend = 'rising'
+    else if (slope < -slopeThreshold) trend = 'falling'
 
-      if (percentChange > 10) {
-        trend = "rising"
-      } else if (percentChange < -10) {
-        trend = "falling"
-      }
-    }
 
     return {
       labels,
-      datasets: [
-        {
-          data: tdsValues,
-          color: () => "#0088ff",
-          strokeWidth: 2,
-        },
-      ],
+      datasets: [{ data: values, color: () => "#0088ff", strokeWidth: 2 }],
       trend,
+      slope,
+      rSquared,
     }
   }, [dailyAverages, chartTimeframe])
 
-  // Prepare pH vs System Score scatter plot data
+  // Prepare pH vs System Score scatter plot data with Pearson's r
   const scatterPlotData = useMemo(() => {
-    if (dailyAverages.length === 0) return null
-
-    // Filter data based on selected timeframe
-    let filteredData = [...dailyAverages]
-
+    if (!dailyAverages.length) return null
     const today = new Date()
     const daysToShow = scatterTimeframe === "7days" ? 7 : scatterTimeframe === "14days" ? 14 : 30
-    const cutoffDate = new Date(today)
-    cutoffDate.setDate(today.getDate() - daysToShow)
+    const cutoff = new Date(today)
+    cutoff.setDate(today.getDate() - daysToShow)
 
-    filteredData = filteredData.filter((item) => {
-      const itemDate = new Date(item.date)
-      return itemDate >= cutoffDate
-    })
+    const filtered = dailyAverages.filter(d => new Date(d.date) >= cutoff)
+    const scatterData = filtered.map(d => ({ x: d.avgSystemScore, y: d.avgPH }))
 
-    // Create data points for the scatter plot
-    // Now with systemScore on x-axis and pH on y-axis
-    const scatterData = filteredData.map((day) => ({
-      x: day.avgSystemScore,
-      y: day.avgPH,
-    }))
+    // Pearson correlation
+    const rValue = computePearson(scatterData)
+    let correlation: 'positive' | 'negative' | 'neutral' = 'neutral'
+    if (rValue > 0) correlation = 'positive'
+    else if (rValue < 0) correlation = 'negative'
 
-    // Calculate correlation
-    let correlation = "neutral"
-    if (scatterData.length >= 3) {
-      // Simple correlation check based on trend direction
-      const sortedByX = [...scatterData].sort((a, b) => a.x - b.x)
-      const lowestX = sortedByX[0]
-      const highestX = sortedByX[sortedByX.length - 1]
+    const labels = Array(scatterData.length).fill("")
+    const datasets = scatterData.map(pt => ({ data: [pt.y], color: () => "#8000ff", strokeWidth: 0 }))
 
-      if (highestX.y > lowestX.y) {
-        correlation = "positive"
-      } else if (highestX.y < lowestX.y) {
-        correlation = "negative"
-      }
-    }
-
-    // Create empty labels array (we don't want to show any labels)
-    const emptyLabels = Array(scatterData.length).fill("")
-
-    // Create datasets with a trick to hide lines:
-    // We'll create individual datasets for each point with only one data point each
-    // This way, there are no lines to connect points
-    const datasets = scatterData.map((point) => ({
-      data: [point.y],
-      color: () => "#8000ff", // Purple color
-      strokeWidth: 0, // No stroke for lines
-    }))
-
-    return {
-      labels: emptyLabels,
-      datasets: datasets,
-      correlation,
-      // Store the system score values separately
-      systemScores: scatterData.map((point) => point.x),
-    }
+    return { labels, datasets, correlation, rValue, systemScores: scatterData.map(pt => pt.x) }
   }, [dailyAverages, scatterTimeframe])
 
   const handleDateSelect = (date: DateData) => {
     setSelectedDate(date.dateString)
   }
 
-  const renderReadingCard = (title: string, value: number, unit: string, optimalRange: string, icon: string) => (
+  const renderReadingCard = (title: string, value: number, unit: string, optimalRange: string, icon: keyof typeof Ionicons.glyphMap) => (
     <View className="bg-white rounded-xl p-4 mb-4 shadow-sm border border-gray-100 ">
       <View className="flex-row justify-between items-center mb-2">
         <Text className="text-lg font-semibold">{title}</Text>
@@ -526,7 +501,7 @@ const Visualization = () => {
       </View>
       <Text className="text-2xl font-bold text-center mb-3 my-4">Visualizations</Text>
 
- {/* Used padding here so that user can scroll to the bottom */}
+      {/* Used padding here so that user can scroll to the bottom */}
       <ScrollView className="flex-1 px-4 pt-3" contentContainerStyle={{ paddingBottom: 100 }} >
         {loading ? (
           <View className="flex-1 justify-center items-center mt-10">
@@ -545,38 +520,36 @@ const Visualization = () => {
               <View className="flex-row justify-between items-center mb-2">
                 <Text className="text-lg font-bold">TDS Trend Over Time</Text>
                 {tdsChartData && (
-                  <View className="flex-row items-center">
-                    <Ionicons
-                      name={
-                        tdsChartData.trend === "rising"
-                          ? "trending-up"
-                          : tdsChartData.trend === "falling"
-                            ? "trending-down"
-                            : "remove"
-                      }
-                      size={20}
-                      color={
-                        tdsChartData.trend === "rising"
-                          ? "#22c55e"
-                          : tdsChartData.trend === "falling"
-                            ? "#ef4444"
-                            : "#6b7280"
-                      }
-                    />
-                    <Text
-                      className={`ml-1 font-medium ${
-                        tdsChartData.trend === "rising"
+                  <View className="items-end">
+                    <View className="flex-row items-center">
+                      <Ionicons
+                        name={
+                          tdsChartData.trend === "rising"
+                            ? "trending-up"
+                            : tdsChartData.trend === "falling"
+                              ? "trending-down"
+                              : "remove"
+                        }
+                        size={20}
+                        color={
+                          tdsChartData.trend === "rising"
+                            ? "#22c55e"
+                            : tdsChartData.trend === "falling"
+                              ? "#ef4444"
+                              : "#6b7280"
+                        }
+                      />
+                      <Text className={`ml-1 font-medium ${tdsChartData.trend === "rising"
                           ? "text-green-500"
                           : tdsChartData.trend === "falling"
                             ? "text-red-500"
                             : "text-gray-500"
-                      }`}
-                    >
-                      {tdsChartData.trend === "rising"
-                        ? "Rising"
-                        : tdsChartData.trend === "falling"
-                          ? "Falling"
-                          : "Stable"}
+                        }`}>
+                        {tdsChartData.trend.charAt(0).toUpperCase() + tdsChartData.trend.slice(1)} trend
+                      </Text>
+                    </View>
+                    <Text className="text-xs text-gray-400">
+                      Slope: {tdsChartData.slope.toFixed(2)}, R²: {tdsChartData.rSquared.toFixed(2)}
                     </Text>
                   </View>
                 )}
@@ -589,9 +562,9 @@ const Visualization = () => {
               </View>
 
               {tdsChartData ? (
-                <View>
+                <>
                   <LineChart
-                    data={tdsChartData}
+                    data={{ labels: tdsChartData.labels, datasets: tdsChartData.datasets }}
                     width={SCREEN_WIDTH - 48}
                     height={220}
                     chartConfig={{
@@ -601,25 +574,15 @@ const Visualization = () => {
                       decimalPlaces: 0,
                       color: (opacity = 1) => `rgba(0, 136, 255, ${opacity})`,
                       labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                      style: {
-                        borderRadius: 16,
-                      },
-                      propsForDots: {
-                        r: "4",
-                        strokeWidth: "2",
-                        stroke: "#0088ff",
-                      },
+                      style: { borderRadius: 16 },
+                      propsForDots: { r: "4", strokeWidth: "2", stroke: "#0088ff" },
                     }}
                     bezier
-                    style={{
-                      marginVertical: 8,
-                      borderRadius: 16,
-                    }}
+                    style={{ marginVertical: 8, borderRadius: 16 }}
                     yAxisSuffix=" ppm"
-                    yAxisLabel=""
                   />
                   <Text className="text-center text-sm text-gray-500 mt-2">Optimal TDS range: 800-1500 ppm</Text>
-                </View>
+                </>
               ) : (
                 <View className="h-[220] justify-center items-center">
                   <Text className="text-gray-500">Not enough data to display chart</Text>
@@ -632,39 +595,39 @@ const Visualization = () => {
               <View className="flex-row justify-between items-center mb-2">
                 <Text className="text-lg font-bold">pH vs System Score</Text>
                 {scatterPlotData && (
-                  <View className="flex-row items-center">
-                    <Ionicons
-                      name={
-                        scatterPlotData.correlation === "positive"
-                          ? "arrow-up-outline"
-                          : scatterPlotData.correlation === "negative"
-                            ? "arrow-down-outline"
-                            : "remove"
-                      }
-                      size={20}
-                      color={
-                        scatterPlotData.correlation === "positive"
-                          ? "#22c55e"
-                          : scatterPlotData.correlation === "negative"
-                            ? "#ef4444"
-                            : "#6b7280"
-                      }
-                    />
-                    <Text
-                      className={`ml-1 font-medium ${
-                        scatterPlotData.correlation === "positive"
+                  <View className="items-end">
+                    <View className="flex-row items-center">
+                      <Ionicons
+                        name={
+                          scatterPlotData.correlation === "positive"
+                            ? "arrow-up-outline"
+                            : scatterPlotData.correlation === "negative"
+                              ? "arrow-down-outline"
+                              : "remove"
+                        }
+                        size={20}
+                        color={
+                          scatterPlotData.correlation === "positive"
+                            ? "#22c55e"
+                            : scatterPlotData.correlation === "negative"
+                              ? "#ef4444"
+                              : "#6b7280"
+                        }
+                      />
+                      <Text className={`ml-1 font-medium ${scatterPlotData.correlation === "positive"
                           ? "text-green-500"
                           : scatterPlotData.correlation === "negative"
                             ? "text-red-500"
                             : "text-gray-500"
-                      }`}
-                    >
-                      {scatterPlotData.correlation === "positive"
-                        ? "Positive correlation"
-                        : scatterPlotData.correlation === "negative"
-                          ? "Negative correlation"
-                          : "No clear correlation"}
-                    </Text>
+                        }`}>
+                        {scatterPlotData.correlation === "positive"
+                          ? "Positive correlation"
+                          : scatterPlotData.correlation === "negative"
+                            ? "Negative correlation"
+                            : "No clear correlation"}
+                      </Text>
+                    </View>
+                    <Text className="text-xs text-gray-500 mt-1">r = {scatterPlotData.rValue.toFixed(2)}</Text>
                   </View>
                 )}
               </View>

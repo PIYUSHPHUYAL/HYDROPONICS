@@ -30,24 +30,8 @@ const Settings = () => {
     fontSize: 1, // 0.8 to 1.2
   })
 
-  // Section expansion state
-  const [expandedSections, setExpandedSections] = useState({
-    notifications: false,
-    units: false,
-    account: false,
-    additional: false,
-    about: false,
-  })
-
   const goToNotifications = () => {
     router.push("/notifications")
-  }
-
-  const toggleSection = (section) => {
-    setExpandedSections({
-      ...expandedSections,
-      [section]: !expandedSections[section],
-    })
   }
 
   // Updated logout function that reloads the app
@@ -111,15 +95,11 @@ const Settings = () => {
     }
   }
 
-  const renderSectionHeader = (icon, title, section) => (
-    <TouchableOpacity
-      className="flex-row items-center py-3 border-b border-gray-200"
-      onPress={() => toggleSection(section)}
-    >
+  const renderSectionHeader = (icon, title) => (
+    <View className="flex-row items-center py-3 border-b border-gray-200">
       <Ionicons name={icon} size={20} color="#3b82f6" style={{ marginRight: 8 }} />
       <Text className="text-base font-medium flex-1">{title}</Text>
-      <Ionicons name={expandedSections[section] ? "chevron-up" : "chevron-down"} size={20} color="#6b7280" />
-    </TouchableOpacity>
+    </View>
   )
 
   const renderSwitchItem = (icon, label, value, onValueChange, description = null) => (
@@ -171,127 +151,110 @@ const Settings = () => {
           <View className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full" />
         </TouchableOpacity>
       </View>
-      <Text className="text-2xl font-bold text-center mb-6 my-4">Settings</Text>
+      <Text className="text-2xl font-bold text-center mb-4 my-4">Settings</Text>
 
-      <ScrollView className="flex-1 px-4">
+      <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 50 }}>
         {/* Notification Preferences */}
         <View className="py-2">
-          {renderSectionHeader("notifications-outline", "Notification ", "notifications")}
-          {expandedSections.notifications && (
-            <View className="py-2">
-              {renderSwitchItem("volume-medium-outline", "Sound", notificationSettings.sound, (value) =>
-                setNotificationSettings({ ...notificationSettings, sound: value }),
-              )}
+          {renderSectionHeader("notifications-outline", "Notification")}
+          <View className="py-2">
+            {renderSwitchItem("volume-medium-outline", "Sound", notificationSettings.sound, (value) =>
+              setNotificationSettings({ ...notificationSettings, sound: value }),
+            )}
 
-              {renderSwitchItem("notifications-outline", "Vibration", notificationSettings.vibration, (value) =>
-                setNotificationSettings({ ...notificationSettings, vibration: value }),
-              )}
-            </View>
-          )}
+            {renderSwitchItem("notifications-outline", "Vibration", notificationSettings.vibration, (value) =>
+              setNotificationSettings({ ...notificationSettings, vibration: value }),
+            )}
+          </View>
         </View>
 
         {/* Units & Language */}
         <View className="py-2">
-          {renderSectionHeader("globe-outline", "Units & Language", "units")}
-          {expandedSections.units && (
-            <View className="py-2 space-y-4">
-              <View>
-                <Text className="text-sm font-medium mb-2">Measurement System</Text>
-                <View className="flex-row">
-                  <TouchableOpacity
-                    className={`flex-1 p-2 border ${units.system === "metric" ? "bg-blue-100 border-blue-300" : "border-gray-200"} rounded-l-md`}
-                    onPress={() => setUnits({ ...units, system: "metric" })}
-                  >
-                    <Text className={`text-center ${units.system === "metric" ? "font-medium text-blue-700" : ""}`}>
-                      Metric (°C, cm)
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    className={`flex-1 p-2 border ${units.system === "imperial" ? "bg-blue-100 border-blue-300" : "border-gray-200"} rounded-r-md`}
-                    onPress={showComingSoonAlert}
-                  >
-                    <Text className={`text-center ${units.system === "imperial" ? "font-medium text-blue-700" : ""}`}>
-                      Imperial (°F, in)
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+          {renderSectionHeader("globe-outline", "Units & Language")}
+          <View className="py-2 space-y-4">
+            <View>
+              <Text className="text-sm font-medium mb-2">Measurement System</Text>
+              <View className="flex-row">
+                <TouchableOpacity
+                  className={`flex-1 p-2 border ${units.system === "metric" ? "bg-blue-100 border-blue-300" : "border-gray-200"} rounded-l-md`}
+                  onPress={() => setUnits({ ...units, system: "metric" })}
+                >
+                  <Text className={`text-center ${units.system === "metric" ? "font-medium text-blue-700" : ""}`}>
+                    Metric (°C, cm)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className={`flex-1 p-2 border ${units.system === "imperial" ? "bg-blue-100 border-blue-300" : "border-gray-200"} rounded-r-md`}
+                  onPress={showComingSoonAlert}
+                >
+                  <Text className={`text-center ${units.system === "imperial" ? "font-medium text-blue-700" : ""}`}>
+                    Imperial (°F, in)
+                  </Text>
+                </TouchableOpacity>
               </View>
-
-              {renderSelectItem("Language", "en", [
-                { label: "English", value: "en" },
-                { label: "Nepali", value: "np" },
-              ])}
             </View>
-          )}
+
+            {renderSelectItem("Language", "en", [
+              { label: "English", value: "en" },
+              { label: "Nepali", value: "np" },
+            ])}
+          </View>
         </View>
 
         {/* Account & Security */}
         <View className="py-2">
-          {renderSectionHeader("shield-outline", "Account & Security", "account")}
-          {expandedSections.account && (
-            <View className="py-2 space-y-4">
-              <TouchableOpacity className="flex-row items-center p-3 bg-blue-50 rounded-md" onPress={showContactAlert}>
-                <Ionicons name="wifi-outline" size={18} color="#3b82f6" style={{ marginRight: 8 }} />
-                <Text className="text-blue-700 font-medium">Request POP Change</Text>
-              </TouchableOpacity>
-
-              {/* "Share Data" section removed as requested */}
-            </View>
-          )}
+          {renderSectionHeader("shield-outline", "Account & Security")}
+          <View className="py-2 space-y-4">
+            <TouchableOpacity className="flex-row items-center p-3 bg-blue-50 rounded-md" onPress={showContactAlert}>
+              <Ionicons name="wifi-outline" size={18} color="#3b82f6" style={{ marginRight: 8 }} />
+              <Text className="text-blue-700 font-medium">Request POP Change</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Additional Features */}
         <View className="py-2">
-          {renderSectionHeader("options-outline", "Additional Features", "additional")}
-          {expandedSections.additional && (
-            <View className="py-2 space-y-4">
-              {/* "Dark Mode" section removed as requested */}
+          {renderSectionHeader("options-outline", "Additional Features")}
+          <View className="py-2 space-y-4">
+            <TouchableOpacity
+              className="flex-row items-center p-3 border border-gray-200 rounded-md"
+              onPress={openTutorial}
+            >
+              <Ionicons name="book-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
+              <Text>View Tutorial</Text>
+            </TouchableOpacity>
 
-              <TouchableOpacity
-                className="flex-row items-center p-3 border border-gray-200 rounded-md"
-                onPress={openTutorial}
-              >
-                <Ionicons name="book-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
-                <Text>View Tutorial</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                className="flex-row items-center p-3 border border-gray-200 rounded-md"
-                onPress={showContactAlert}
-              >
-                <Ionicons name="chatbox-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
-                <Text>Send Feedback</Text>
-              </TouchableOpacity>
-
-              {/* "Check for Updates" section removed as requested */}
-            </View>
-          )}
+            <TouchableOpacity
+              className="flex-row items-center p-3 border border-gray-200 rounded-md"
+              onPress={showContactAlert}
+            >
+              <Ionicons name="chatbox-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
+              <Text>Send Feedback</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* About */}
         <View className="py-2">
-          {renderSectionHeader("information-circle-outline", "About", "about")}
-          {expandedSections.about && (
-            <View className="py-2 space-y-4">
-              <View className="flex-row justify-between items-center">
-                <Text className="text-sm">Version</Text>
-                <Text className="text-sm font-medium">1.0.0</Text>
-              </View>
-
-              <TouchableOpacity
-                className="flex-row items-center p-3 border border-gray-200 rounded-md"
-                onPress={showContactAlert}
-              >
-                <Ionicons name="mail-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
-                <Text>Contact Support</Text>
-              </TouchableOpacity>
-
-              <View className="p-3 bg-gray-50 rounded-md">
-                <Text className="text-sm text-gray-500 text-center">Developed by Piyush Phuyal</Text>
-                {/* <Text className="text-xs text-gray-400 text-center mt-1">Special thanks to all contributors</Text> */}
-              </View>
+          {renderSectionHeader("information-circle-outline", "About")}
+          <View className="py-2 space-y-4">
+            <View className="flex-row justify-between items-center">
+              <Text className="text-sm">Version</Text>
+              <Text className="text-sm font-medium">1.0.0</Text>
             </View>
-          )}
+
+            <TouchableOpacity
+              className="flex-row items-center p-3 border border-gray-200 rounded-md"
+              onPress={showContactAlert}
+            >
+              <Ionicons name="mail-outline" size={18} color="#6b7280" style={{ marginRight: 8 }} />
+              <Text>Contact Support</Text>
+            </TouchableOpacity>
+
+            <View className="p-3 bg-gray-50 rounded-md">
+              <Text className="text-sm text-gray-500 text-center">Developed by Piyush Phuyal</Text>
+            </View>
+          </View>
         </View>
 
         {/* Log Out Button */}
