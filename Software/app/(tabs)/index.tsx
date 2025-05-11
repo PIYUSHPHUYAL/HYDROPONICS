@@ -3,14 +3,29 @@ import { Ionicons } from "@expo/vector-icons"
 import { StatusBar } from "expo-status-bar"
 import { useRouter } from "expo-router"
 import { useState, useEffect, useRef } from "react"
-import { database, ref, onValue } from "./firebase" // Import from your firebase.js file
+import { database, ref, onValue } from "./firebase" // Import from firebase.js file
 import { Linking } from "react-native"
 import { IconButton } from 'react-native-paper'
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
+function getLightCategory(ldrValue: number) {
+  if (ldrValue <= 500) {
+    return "Very Low";
+  } else if (ldrValue <= 1500) {
+    return "Low";
+  } else if (ldrValue <= 3000) {
+    return "Moderate";
+  } else if (ldrValue <= 4095) {
+    return "High";
+  } else {
+    return "--";
+  }
+}
+
 export default function Index() {
   const router = useRouter()
   const [popCode, setPopCode] = useState(null)
+  const [displayName, setDisplayName] = useState("") // New state to just show the alphabetic part of the POP code
   const [sensorData, setSensorData] = useState({
     pH: "--",
     nutrient: "--",
@@ -60,6 +75,11 @@ export default function Index() {
         if (savedPop) {
           console.log("Using POP code from storage:", savedPop)
           setPopCode(savedPop)
+
+          // Extract only the alphabetic part for display
+          const alphabeticOnly = savedPop.replace(/[0-9]/g, '')
+          setDisplayName(alphabeticOnly)
+
         } else {
           console.error("No POP code found in AsyncStorage")
           // You might want to handle this error case - redirect to auth screen
@@ -112,26 +132,26 @@ export default function Index() {
       const data = snapshot.val()
       if (data) {
         // conversion factor, EC calc, etc.
-        const conversionFactor = 0.67
+        const conversionFactor = 0.7; // Changed conversion factor to 0.7
         const calculatedEC = data.tds
-          ? (parseFloat(data.tds) / conversionFactor).toFixed(0)
-          : "--"
+          ? (parseFloat(data.tds) / (conversionFactor * 1000)).toFixed(2)
+          : "--";
 
         // format lastUpdated exactly how you like
-        let [h, m, s] = data.time?.split(":").map(Number) || [0,0,0]
+        let [h, m, s] = data.time?.split(":").map(Number) || [0, 0, 0]
         const ampm = h >= 12 ? "PM" : "AM"
         h = h % 12 || 12
         const today = new Date(data.timestamp * 1000) // if you stored Unix secs
-        const lastUpdated = `${today.getMonth()+1}/${today.getDate()}/${today.getFullYear()} ${h}:${m.toString().padStart(2,"0")} ${ampm}`
+        const lastUpdated = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()} ${h}:${m.toString().padStart(2, "0")} ${ampm}`
 
         setSensorData({
-          pH:       data.pH?.toFixed(2)       || "--",
-          nutrient: data.tds?.toFixed(0)      || "--",
-          sunlight: data.ldr?.toFixed(0)      || "--",
+          pH: data.pH?.toFixed(2) || "--",
+          nutrient: data.tds?.toFixed(0) || "--",
+          sunlight: data.ldr?.toFixed(0) || "--",
           EC: calculatedEC,
-          humidity: data.airHumidity?.toFixed(0)   || "--",
+          humidity: data.airHumidity?.toFixed(0) || "--",
           airTemperature: data.airTemperature?.toFixed(1) || "--",
-          temperature: data.waterTemperature?.toFixed(0)   || "--",
+          temperature: data.waterTemperature?.toFixed(0) || "--",
           lastUpdated,
         })
       }
@@ -149,23 +169,23 @@ export default function Index() {
     router.push("/notifications")
   }
 
-  // Retrieve username from AsyncStorage or use a default
-  const [username, setUsername] = useState("User")
+  // // Retrieve username from AsyncStorage or use a default
+  // const [username, setUsername] = useState("User")
 
-  useEffect(() => {
-    const getUsername = async () => {
-      try {
-        const savedUsername = await AsyncStorage.getItem("username")
-        if (savedUsername) {
-          setUsername(savedUsername)
-        }
-      } catch (error) {
-        console.error("Error retrieving username:", error)
-      }
-    }
+  // useEffect(() => {
+  //   const getUsername = async () => {
+  //     try {
+  //       const savedUsername = await AsyncStorage.getItem("username")
+  //       if (savedUsername) {
+  //         setUsername(savedUsername)
+  //       }
+  //     } catch (error) {
+  //       console.error("Error retrieving username:", error)
+  //     }
+  //   }
 
-    getUsername()
-  }, [])
+  //   getUsername()
+  // }, [])
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -175,7 +195,7 @@ export default function Index() {
       <View className="flex-row justify-between items-center px-5 pt-4 pb-2">
         <View style={{ transform: [{ translateX: 110 }] }} className="flex-row items-center">
           <Image source={require("../../assets12345/logo.png")} className="w-8 h-8 mr-3 relative -top-[3px] -left-[-6px]" />
-          <Text className="text-lg font-semibold text-green-500">Hey {username}!</Text>
+          <Text className="text-lg font-semibold text-green-500">Hey {displayName}!</Text>
         </View>
         <TouchableOpacity onPress={goToNotifications}>
           <Ionicons name="notifications-outline" size={24} color="black" />
@@ -227,7 +247,7 @@ export default function Index() {
         </ScrollView>
 
         {/* Pagination dots */}
-        <View className="flex-row justify-center" style={{ top:5 }}>
+        <View className="flex-row justify-center" style={{ top: 5 }}>
           {tipsData.map((_, index) => (
             <View
               key={index}
@@ -237,7 +257,7 @@ export default function Index() {
         </View>
       </View>
 
-      <ScrollView className="flex-1" style={{ top:-5 }}>
+      <ScrollView className="flex-1" style={{ top: -5 }}>
         {/* Metrics Grid */}
         <View className="mx-5 mt-1">
           <View className="flex-row mb-5">
@@ -255,7 +275,10 @@ export default function Index() {
               <View className="w-10 h-10 mb-3 items-center justify-center">
                 <Ionicons name="leaf-outline" size={28} color="#4CAF50" />
               </View>
-              <Text className="text-2xl font-bold">{sensorData.nutrient}</Text>
+              <Text className="text-2xl font-bold">
+                {sensorData.nutrient}
+                <Text className="text-sm"> ppm</Text>
+              </Text>
               <Text className="text-gray-500 text-sm">nutrient</Text>
             </View>
           </View>
@@ -266,7 +289,7 @@ export default function Index() {
               <View className="w-10 h-10 mb-3 items-center justify-center">
                 <Ionicons name="sunny" size={28} color="#FFD700" />
               </View>
-              <Text className="text-2xl font-bold">{sensorData.sunlight}</Text>
+              <Text className="text-2xl font-bold">{getLightCategory(parseInt(sensorData.sunlight))}</Text>
               <Text className="text-gray-500 text-sm">sunlight</Text>
             </View>
 
@@ -275,7 +298,10 @@ export default function Index() {
               <View className="w-10 h-10 mb-3 items-center justify-center">
                 <Ionicons name="cube" size={28} color="#4CAF50" />
               </View>
-              <Text className="text-2xl font-bold">{sensorData.EC}</Text>
+              <Text className="text-2xl font-bold">
+                {sensorData.EC}
+                <Text className="text-sm"> μS/cm</Text>
+              </Text>
               <Text className="text-gray-500 text-sm">EC</Text>
             </View>
           </View>
