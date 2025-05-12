@@ -1,3 +1,4 @@
+
 // metro.config.js
 const { getDefaultConfig } = require('@expo/metro-config');
 const { withNativeWind }   = require('nativewind/metro');
@@ -16,3 +17,4 @@ config.resolver.unstable_enablePackageExports = false;  // Expo SDK 53+ hack :co
 module.exports = withNativeWind(config, {
   input: './app/globals.css',
 });
+
