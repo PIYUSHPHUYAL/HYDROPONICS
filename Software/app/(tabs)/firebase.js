@@ -8,13 +8,13 @@ import { initializeAuth, browserLocalPersistence } from 'firebase/auth';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBkr6fF1ZmZ6DtSlKcPA3UrAYSH4Ib9pIc",
-  authDomain: "hydroponics-a6609.firebaseapp.com",
-  projectId: "hydroponics-a6609",
-  storageBucket: "hydroponics-a6609.firebasestorage.app",
-  messagingSenderId: "412721417359",
-  appId: "1:412721417359:web:ccd3cd6de717645048f4fa",
-  measurementId: "G-PK7SK97G2S"
+  apiKey: "############3",
+  authDomain: "##############",
+  projectId: "########3",
+  storageBucket: "###########",
+  messagingSenderId: "#############",
+  appId: "##########3",
+  measurementId: "########"
 };
 
 // Initialize Firebase
